@@ -48,6 +48,7 @@ storage/outputs/*
 storage/temp/*
 !storage/temp/.gitkeep
 scratch/
+VISION_AI_TEST_DATA/
 *.tmp
 *.temp
 
