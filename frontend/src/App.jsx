@@ -53,6 +53,18 @@ export default function App() {
       {/* Public Landing Page */}
       <Route path="/" element={<LandingPage systemStatus={systemStatus} />} />
 
+      {/* Top-Level Shortcut Aliases */}
+      <Route path="/dashboard" element={<Navigate to="/app/dashboard" replace />} />
+      <Route path="/smart-restore" element={<Navigate to="/app/smart-restore" replace />} />
+      <Route path="/image-colorization" element={<Navigate to="/app/image-colorization" replace />} />
+      <Route path="/image-sr" element={<Navigate to="/app/image-sr" replace />} />
+      <Route path="/image-enhancement" element={<Navigate to="/app/image-sr" replace />} />
+      <Route path="/video-colorization" element={<Navigate to="/app/video-colorization" replace />} />
+      <Route path="/video-enhancement" element={<Navigate to="/app/video-enhancement" replace />} />
+      <Route path="/video-sr" element={<Navigate to="/app/video-enhancement" replace />} />
+      <Route path="/history" element={<Navigate to="/app/history" replace />} />
+      <Route path="/about" element={<Navigate to="/app/about" replace />} />
+
       {/* Authenticated / Application Studio Shell */}
       <Route path="/app" element={<AppLayout systemStatus={systemStatus} />}>
         <Route index element={<Navigate to="/app/dashboard" replace />} />

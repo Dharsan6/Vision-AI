@@ -4,18 +4,15 @@ import {
   Sparkles,
   Download,
   RotateCcw,
-  Cpu,
-  Clock,
-  Layers,
   CheckCircle2,
   AlertCircle,
-  Maximize2,
-  FileText,
   Sliders,
-  Zap,
-  Activity,
-  Eye,
-  ArrowRight,
+  Columns,
+  Image as ImageIcon,
+  Maximize2,
+  X,
+  ChevronDown,
+  ChevronUp,
   ShieldCheck,
   Palette,
 } from 'lucide-react';
@@ -29,17 +26,19 @@ export default function SmartRestore() {
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisError, setAnalysisError] = useState(null);
 
-  // Mode & configuration
   const [mode, setMode] = useState('quick'); // 'quick' or 'advanced'
   const [enableColorize, setEnableColorize] = useState(true);
   const [scale, setScale] = useState(4);
   const [preferredFormat, setPreferredFormat] = useState('png');
 
-  // Execution state
   const [executing, setExecuting] = useState(false);
   const [currentStageText, setCurrentStageText] = useState('');
   const [error, setError] = useState(null);
   const [result, setResult] = useState(null);
+
+  const [viewMode, setViewMode] = useState('slider');
+  const [showFullModal, setShowFullModal] = useState(false);
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
 
   const handleFileSelect = async (file) => {
     setSelectedFile(file);
@@ -50,20 +49,27 @@ export default function SmartRestore() {
 
     if (!file) return;
 
-    // Run diagnostic analysis
     setAnalyzing(true);
     try {
       const data = await api.analyzeMedia(file);
       setAnalysis(data);
-      // Auto-configure advanced defaults from recommendation
       setEnableColorize(data.recommendation.needs_colorization);
       setScale(data.recommendation.recommended_scale > 0 ? data.recommendation.recommended_scale : 4);
     } catch (err) {
       console.error('Media diagnostic failed:', err);
-      setAnalysisError(err.response?.data?.detail || err.message || 'Diagnostic inspection failed');
+      setAnalysisError(err.response?.data?.detail || err.message || 'Diagnostic inspection failed.');
     } finally {
       setAnalyzing(false);
     }
+  };
+
+  const verifyImagePreload = (src) => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(true);
+      img.onerror = () => reject(new Error('Restored image could not be loaded from server.'));
+      img.src = src;
+    });
   };
 
   const handleExecuteRestore = async () => {
@@ -72,18 +78,9 @@ export default function SmartRestore() {
     setExecuting(true);
     setError(null);
     setResult(null);
-    setCurrentStageText('Initializing deep neural networks...');
+    setCurrentStageText('Analyzing image structure and applying restoration...');
 
     try {
-      if (mode === 'quick') {
-        setCurrentStageText('Running automated multi-stage restoration...');
-      } else {
-        const stageList = [];
-        if (enableColorize) stageList.push('DDColor');
-        if (scale > 0) stageList.push(`Real-ESRGAN ${scale}x`);
-        setCurrentStageText(`Executing ${stageList.join(' + ')} pipeline...`);
-      }
-
       const res = await api.executeSmartRestore(
         selectedFile,
         mode,
@@ -91,10 +88,18 @@ export default function SmartRestore() {
         scale,
         preferredFormat
       );
+
+      const activeUrl = res.final_output_url || res.png_url || res.output_url;
+      await verifyImagePreload(activeUrl);
+
+      res.active_output_url = activeUrl;
+      res.active_download_name = `smart_restored_${selectedFile.name.replace(/\.[^/.]+$/, '')}.${preferredFormat}`;
+      res.active_download_url = `/api/media/download/${preferredFormat === 'png' ? res.png_filename : res.jpg_filename}?name=${res.active_download_name}`;
+
       setResult(res);
     } catch (err) {
       console.error('Smart restore execution failed:', err);
-      setError(err.response?.data?.detail || err.message || 'Restoration pipeline execution failed');
+      setError(err.response?.data?.detail || err.message || 'Restoration failed. Please try again.');
     } finally {
       setExecuting(false);
       setCurrentStageText('');
@@ -107,27 +112,27 @@ export default function SmartRestore() {
     setResult(null);
     setError(null);
     setAnalysisError(null);
+    setViewMode('slider');
+    setShowFullModal(false);
   };
 
   return (
-    <div className="space-y-8 max-w-5xl mx-auto">
+    <div className="space-y-8 max-w-4xl mx-auto">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#1A2B40] pb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#1A2B40] pb-6">
         <div>
-          <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-[#101D2E] border border-[#1A2B40] text-xs font-mono text-[#80BCFF] mb-2">
-            <Wand2 className="w-3.5 h-3.5 text-[#268BFF]" />
-            <span>INTELLIGENT MULTI-STAGE RESTORATION</span>
-          </div>
-          <h1 className="text-3xl font-extrabold text-[#F5F8FC] tracking-tight">VISION AI Smart Restore</h1>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-[#F5F8FC] tracking-tight">
+            Smart Restore Studio
+          </h1>
           <p className="text-sm text-[#98A9BD] mt-1">
-            Automatic media diagnosis and multi-stage orchestration combining DDColor and Real-ESRGAN into a single pipeline.
+            Automated image diagnosis and guided multi-stage restoration in a single step.
           </p>
         </div>
 
         {result && (
           <button
             onClick={handleReset}
-            className="px-4 py-2 rounded-xl bg-[#0C1421] hover:bg-[#101D2E] border border-[#1A2B40] text-xs font-mono text-[#98A9BD] hover:text-[#F5F8FC] flex items-center space-x-2 transition-colors self-start md:self-auto"
+            className="px-4 py-2 rounded-xl bg-[#0C1421] hover:bg-[#101D2E] border border-[#1A2B40] text-xs font-medium text-[#98A9BD] hover:text-[#F5F8FC] flex items-center space-x-2 transition-colors self-start sm:self-auto shadow-sm"
           >
             <RotateCcw className="w-3.5 h-3.5" />
             <span>Restore Another Image</span>
@@ -136,247 +141,103 @@ export default function SmartRestore() {
       </div>
 
       {!result ? (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Left Column: Uploader & Diagnostic Panel */}
-          <div className="lg:col-span-2 space-y-6">
-            <div className="p-6 rounded-2xl bg-[#0C1421] border border-[#1A2B40] space-y-4">
-              <h2 className="text-sm font-semibold text-[#F5F8FC] uppercase tracking-wider font-mono">
-                1. Select Source Photograph
-              </h2>
-              <FileDropzone
-                file={selectedFile}
-                onFileSelect={handleFileSelect}
-                accept="image/png,image/jpeg,image/webp,image/bmp,image/tiff"
-                acceptType="image"
-                maxSizeMB={50}
-                sampleUrl="/storage/samples/sample_portrait_gray.jpg"
-                sampleLabel="Load Benchmark Vintage Portrait"
-              />
+        <div className="space-y-6">
+          {/* 1. Upload Card */}
+          <div className="p-6 rounded-2xl bg-[#0C1421] border border-[#1A2B40] space-y-4">
+            <span className="text-xs font-semibold text-[#80BCFF] uppercase tracking-wider font-mono">
+              Source Photograph
+            </span>
+
+            <FileDropzone
+              file={selectedFile}
+              onFileSelect={handleFileSelect}
+              accept="image/png,image/jpeg,image/webp,image/bmp"
+              acceptType="image"
+              maxSizeMB={50}
+              sampleUrl="/storage/samples/sample_portrait_gray.jpg"
+              sampleLabel="Load Test Sample (Portrait 512×512)"
+            />
+          </div>
+
+          {/* 2. Analysis & Guided Plan Card */}
+          {analyzing && (
+            <div className="p-6 rounded-2xl bg-[#0C1421] border border-[#1A2B40] flex items-center space-x-3 text-xs text-[#80BCFF]">
+              <span className="w-4 h-4 border-2 border-[#268BFF]/30 border-t-[#268BFF] rounded-full animate-spin" />
+              <span>Diagnosing photo color, clarity, and resolution...</span>
             </div>
+          )}
 
-            {/* Diagnostic Analysis Panel */}
-            {analyzing && (
-              <div className="p-6 rounded-2xl bg-[#0C1421] border border-[#1A2B40] flex items-center space-x-3 text-xs font-mono text-[#80BCFF]">
-                <span className="w-4 h-4 border-2 border-[#268BFF]/30 border-t-[#268BFF] rounded-full animate-spin" />
-                <span>Scanning chromaticity, sharpness, noise residuals, and pixel density...</span>
+          {analysisError && (
+            <div className="p-4 rounded-xl bg-[#F06464]/10 border border-[#F06464]/30 text-xs text-[#F06464] flex items-center space-x-2">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{analysisError}</span>
+            </div>
+          )}
+
+          {analysis && (
+            <div className="p-6 rounded-2xl bg-[#0C1421] border border-[#268BFF]/30 space-y-5 shadow-lg">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <ShieldCheck className="w-4 h-4 text-[#25C98A]" />
+                  <h3 className="text-sm font-bold text-[#F5F8FC]">Automated Condition Diagnosis</h3>
+                </div>
+                <span className="text-[11px] font-medium text-[#80BCFF] bg-[#101D2E] px-2.5 py-0.5 rounded-full border border-[#1A2B40]">
+                  Analyzed
+                </span>
               </div>
-            )}
 
-            {analysisError && (
-              <div className="p-4 rounded-xl bg-[#F06464]/10 border border-[#F06464]/30 text-xs font-mono text-[#F06464] flex items-center space-x-2">
-                <AlertCircle className="w-4 h-4 shrink-0" />
-                <span>{analysisError}</span>
-              </div>
-            )}
-
-            {analysis && (
-              <div className="p-6 rounded-2xl bg-[#0C1421] border border-[#268BFF]/40 space-y-5 shadow-[0_0_20px_rgba(38,139,255,0.08)]">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2">
-                    <Activity className="w-4 h-4 text-[#268BFF]" />
-                    <h3 className="text-sm font-bold text-[#F5F8FC] tracking-wide">
-                      AUTOMATED MEDIA DIAGNOSTIC
-                    </h3>
-                  </div>
-                  <span className="text-[11px] font-mono text-[#80BCFF] bg-[#101D2E] px-2.5 py-0.5 rounded-full border border-[#1A2B40]">
-                    Confidence Verified
+              {/* Consumer condition findings */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                <div className="p-3.5 rounded-xl bg-[#080D16] border border-[#1A2B40] space-y-1">
+                  <span className="text-[11px] text-[#64758A] block">Color Profile</span>
+                  <span className="font-semibold text-[#F5F8FC] block">
+                    {analysis.color_profile.is_grayscale ? 'Monochrome (Black & White)' : 'Full Color'}
+                  </span>
+                  <span className="text-[11px] text-[#80BCFF]">
+                    {analysis.color_profile.is_grayscale ? 'Colorization needed' : 'Colors preserved'}
                   </span>
                 </div>
 
-                {/* 4 Diagnostic Metrics Grid */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  <div className="p-3 rounded-xl bg-[#080D16] border border-[#1A2B40] space-y-1">
-                    <span className="text-[10px] font-mono text-[#64758A] block">PALETTE TYPE</span>
-                    <span className={`text-xs font-bold font-mono ${analysis.color_profile.is_grayscale ? 'text-[#80BCFF]' : 'text-[#25C98A]'}`}>
-                      {analysis.color_profile.palette_type}
-                    </span>
-                    <span className="text-[10px] font-mono text-[#64758A] block">
-                      Sat: {analysis.color_profile.mean_saturation}
-                    </span>
-                  </div>
-
-                  <div className="p-3 rounded-xl bg-[#080D16] border border-[#1A2B40] space-y-1">
-                    <span className="text-[10px] font-mono text-[#64758A] block">SHARPNESS</span>
-                    <span className="text-xs font-bold font-mono text-[#F5F8FC]">
-                      {analysis.sharpness.grade}
-                    </span>
-                    <span className="text-[10px] font-mono text-[#64758A] block">
-                      Var: {analysis.sharpness.laplacian_variance}
-                    </span>
-                  </div>
-
-                  <div className="p-3 rounded-xl bg-[#080D16] border border-[#1A2B40] space-y-1">
-                    <span className="text-[10px] font-mono text-[#64758A] block">RESOLUTION</span>
-                    <span className="text-xs font-bold font-mono text-[#F5F8FC]">
-                      {analysis.dimensions.width}×{analysis.dimensions.height}
-                    </span>
-                    <span className="text-[10px] font-mono text-[#64758A] block truncate">
-                      {analysis.resolution_category}
-                    </span>
-                  </div>
-
-                  <div className="p-3 rounded-xl bg-[#080D16] border border-[#1A2B40] space-y-1">
-                    <span className="text-[10px] font-mono text-[#64758A] block">NOISE & CONTRAST</span>
-                    <span className="text-xs font-bold font-mono text-[#F5F8FC]">
-                      {analysis.contrast.grade}
-                    </span>
-                    <span className="text-[10px] font-mono text-[#64758A] block truncate">
-                      {analysis.noise.grade}
-                    </span>
-                  </div>
+                <div className="p-3.5 rounded-xl bg-[#080D16] border border-[#1A2B40] space-y-1">
+                  <span className="text-[11px] text-[#64758A] block">Image Clarity</span>
+                  <span className="font-semibold text-[#F5F8FC] block">
+                    {analysis.sharpness.grade || 'Standard Print'}
+                  </span>
+                  <span className="text-[11px] text-[#80BCFF]">Detail reconstruction recommended</span>
                 </div>
 
-                {/* AI Recommendation Banner */}
-                <div className="p-4 rounded-xl bg-[#101D2E] border border-[#1A2B40] space-y-1.5">
-                  <div className="flex items-center space-x-2 text-xs font-bold text-[#80BCFF]">
-                    <ShieldCheck className="w-4 h-4 text-[#25C98A]" />
-                    <span>RECOMMENDED WORKFLOW: {analysis.recommendation.summary}</span>
-                  </div>
-                  <p className="text-xs text-[#98A9BD] leading-relaxed">
-                    {analysis.recommendation.explanation}
-                  </p>
+                <div className="p-3.5 rounded-xl bg-[#080D16] border border-[#1A2B40] space-y-1">
+                  <span className="text-[11px] text-[#64758A] block">Dimensions</span>
+                  <span className="font-semibold text-[#F5F8FC] block font-mono">
+                    {analysis.dimensions.width} × {analysis.dimensions.height} px
+                  </span>
+                  <span className="text-[11px] text-[#80BCFF]">
+                    Target: ~{analysis.dimensions.width * scale} × {analysis.dimensions.height * scale} px
+                  </span>
                 </div>
               </div>
-            )}
-          </div>
 
-          {/* Right Column: Execution Configuration */}
-          <div className="space-y-6">
-            <div className="p-6 rounded-2xl bg-[#0C1421] border border-[#1A2B40] space-y-5">
-              <h2 className="text-sm font-semibold text-[#F5F8FC] uppercase tracking-wider font-mono">
-                2. Restoration Strategy
-              </h2>
-
-              {/* Mode Tabs: Quick vs Advanced */}
-              <div className="grid grid-cols-2 gap-2 p-1 rounded-xl bg-[#080D16] border border-[#1A2B40]">
-                <button
-                  type="button"
-                  onClick={() => setMode('quick')}
-                  className={`py-2 px-3 rounded-lg text-xs font-mono font-medium transition-all ${
-                    mode === 'quick'
-                      ? 'bg-[#101D2E] text-[#268BFF] border border-[#1A2B40] shadow-sm'
-                      : 'text-[#98A9BD] hover:text-[#F5F8FC]'
-                  }`}
-                >
-                  Quick Restore
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setMode('advanced')}
-                  className={`py-2 px-3 rounded-lg text-xs font-mono font-medium transition-all ${
-                    mode === 'advanced'
-                      ? 'bg-[#101D2E] text-[#268BFF] border border-[#1A2B40] shadow-sm'
-                      : 'text-[#98A9BD] hover:text-[#F5F8FC]'
-                  }`}
-                >
-                  Advanced Controls
-                </button>
+              {/* Recommended Plan */}
+              <div className="p-4 rounded-xl bg-[#101D2E] border border-[#1A2B40] space-y-1">
+                <div className="text-xs font-bold text-[#80BCFF]">
+                  Recommended Plan: {analysis.recommendation.summary}
+                </div>
+                <p className="text-xs text-[#98A9BD] leading-relaxed">
+                  {analysis.recommendation.explanation}
+                </p>
               </div>
 
-              {/* Mode 1: Quick Restore Rationale */}
-              {mode === 'quick' ? (
-                <div className="space-y-3">
-                  <div className="text-xs text-[#98A9BD] leading-relaxed">
-                    Automated one-click restoration based on diagnostic findings:
-                  </div>
-                  <div className="space-y-2 text-xs font-mono">
-                    <div className="p-2.5 rounded-lg bg-[#080D16] border border-[#1A2B40] flex items-center justify-between">
-                      <span className="text-[#F5F8FC]">Stage 1: DDColor Colorization</span>
-                      <span className={analysis?.recommendation.needs_colorization ? 'text-[#25C98A]' : 'text-[#64758A]'}>
-                        {analysis?.recommendation.needs_colorization ? 'Auto-Enabled' : 'Skipped'}
-                      </span>
-                    </div>
-                    <div className="p-2.5 rounded-lg bg-[#080D16] border border-[#1A2B40] flex items-center justify-between">
-                      <span className="text-[#F5F8FC]">Stage 2: Real-ESRGAN Upscaling</span>
-                      <span className="text-[#25C98A]">
-                        {analysis?.recommendation.recommended_scale ? `${analysis.recommendation.recommended_scale}x Mode` : '4x Mode'}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                /* Mode 2: Advanced Controls */
-                <div className="space-y-4">
-                  {/* Colorization Toggle */}
-                  <div className="flex items-center justify-between p-3 rounded-xl bg-[#080D16] border border-[#1A2B40]">
-                    <div className="flex items-center space-x-2">
-                      <Palette className="w-4 h-4 text-[#268BFF]" />
-                      <span className="text-xs font-mono text-[#F5F8FC]">DDColor Colorization</span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setEnableColorize(!enableColorize)}
-                      className={`w-11 h-6 rounded-full transition-colors relative ${
-                        enableColorize ? 'bg-[#1769D2]' : 'bg-[#1A2B40]'
-                      }`}
-                    >
-                      <span
-                        className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${
-                          enableColorize ? 'translate-x-5' : 'translate-x-0'
-                        }`}
-                      />
-                    </button>
-                  </div>
-
-                  {/* Super-Resolution Selector */}
-                  <div>
-                    <label className="block text-xs font-mono text-[#98A9BD] mb-1.5">
-                      SUPER-RESOLUTION UPSCALE
-                    </label>
-                    <div className="grid grid-cols-3 gap-2">
-                      {[0, 2, 4].map((s) => (
-                        <button
-                          key={s}
-                          type="button"
-                          onClick={() => setScale(s)}
-                          className={`py-2 px-2 rounded-xl border text-xs font-mono transition-all text-center ${
-                            scale === s
-                              ? 'border-[#268BFF] bg-[#101D2E] text-[#80BCFF]'
-                              : 'border-[#1A2B40] bg-[#080D16] text-[#98A9BD] hover:bg-[#101D2E]'
-                          }`}
-                        >
-                          {s === 0 ? 'None (1x)' : `${s}x Scale`}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Format Selector */}
-                  <div>
-                    <label className="block text-xs font-mono text-[#98A9BD] mb-1.5">
-                      OUTPUT FORMAT
-                    </label>
-                    <div className="grid grid-cols-2 gap-2">
-                      {['png', 'jpg'].map((fmt) => (
-                        <button
-                          key={fmt}
-                          type="button"
-                          onClick={() => setPreferredFormat(fmt)}
-                          className={`py-2 px-2 rounded-xl border text-xs font-mono transition-all text-center uppercase ${
-                            preferredFormat === fmt
-                              ? 'border-[#268BFF] bg-[#101D2E] text-[#80BCFF]'
-                              : 'border-[#1A2B40] bg-[#080D16] text-[#98A9BD] hover:bg-[#101D2E]'
-                          }`}
-                        >
-                          {fmt}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Execution Button */}
+              {/* Primary Action Button */}
               <button
                 type="button"
-                disabled={!selectedFile || analyzing || executing}
+                disabled={executing}
                 onClick={handleExecuteRestore}
-                className="w-full py-3.5 rounded-xl bg-gradient-to-r from-[#1769D2] to-[#268BFF] hover:from-[#268BFF] hover:to-[#80BCFF] disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-sm tracking-wide shadow-[0_0_20px_rgba(38,139,255,0.4)] transition-all flex items-center justify-center space-x-2"
+                className="w-full py-4 rounded-xl bg-[#268BFF] hover:bg-[#1769D2] disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-sm tracking-wide shadow-[0_0_20px_rgba(38,139,255,0.3)] transition-all flex items-center justify-center space-x-2"
               >
                 {executing ? (
                   <>
                     <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    <span>{currentStageText || 'Executing Restoration...'}</span>
+                    <span>{currentStageText || 'Restoring photograph...'}</span>
                   </>
                 ) : (
                   <>
@@ -387,115 +248,241 @@ export default function SmartRestore() {
               </button>
 
               {error && (
-                <div className="p-3 rounded-xl bg-[#F06464]/10 border border-[#F06464]/30 text-xs font-mono text-[#F06464] flex items-center space-x-2">
-                  <AlertCircle className="w-4 h-4 shrink-0" />
-                  <span>{error}</span>
+                <div className="p-4 rounded-xl bg-[#F06464]/10 border border-[#F06464]/30 space-y-2 text-xs text-[#F06464]">
+                  <div className="flex items-center space-x-2 font-semibold">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span>Restoration Notice</span>
+                  </div>
+                  <p className="text-[#F5F8FC]/90">{error}</p>
                 </div>
               )}
             </div>
-          </div>
+          )}
         </div>
       ) : (
-        /* Results Section */
+        /* Results View */
         <div className="space-y-6">
-          {/* Comparison Slider */}
-          <div className="p-6 rounded-2xl bg-[#0C1421] border border-[#1A2B40] space-y-4">
-            <div className="flex items-center justify-between text-xs font-mono">
-              <span className="text-[#80BCFF] flex items-center space-x-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-[#268BFF]" />
-                <span>INTERACTIVE COMPARISON (ORIGINAL VS SMART RESTORED)</span>
+          {/* Controls Header */}
+          <div className="p-4 rounded-2xl bg-[#0C1421] border border-[#1A2B40] flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center space-x-2">
+              <span className="px-3 py-1 rounded-full bg-[#101D2E] border border-[#268BFF]/40 text-xs font-semibold text-[#80BCFF]">
+                Smart Restored ({result.scale_factor})
               </span>
-              <span className="text-[#98A9BD]">
-                {result.input_resolution} → {result.output_resolution}
+              <span className="text-xs font-mono text-[#98A9BD]">
+                {result.input_resolution} → {result.output_resolution} px
               </span>
             </div>
 
-            <div className="rounded-xl overflow-hidden border border-[#1A2B40] bg-[#05070B]">
-              <ComparisonSlider
-                originalUrl={result.original_image_url}
-                processedUrl={result.final_output_url}
-                originalLabel={`Original (${result.input_resolution})`}
-                processedLabel={`Smart Restored (${result.output_resolution})`}
-              />
+            {/* View Mode Switcher */}
+            <div className="flex items-center space-x-1 p-1 rounded-xl bg-[#080D16] border border-[#1A2B40]">
+              <button
+                type="button"
+                onClick={() => setViewMode('slider')}
+                className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors flex items-center space-x-1.5 ${
+                  viewMode === 'slider'
+                    ? 'bg-[#101D2E] text-[#80BCFF] border border-[#268BFF]/30'
+                    : 'text-[#98A9BD] hover:text-[#F5F8FC]'
+                }`}
+              >
+                <Sliders className="w-3.5 h-3.5" />
+                <span>Comparison Slider</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setViewMode('sideBySide')}
+                className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors flex items-center space-x-1.5 ${
+                  viewMode === 'sideBySide'
+                    ? 'bg-[#101D2E] text-[#80BCFF] border border-[#268BFF]/30'
+                    : 'text-[#98A9BD] hover:text-[#F5F8FC]'
+                }`}
+              >
+                <Columns className="w-3.5 h-3.5" />
+                <span>Side-by-Side</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setViewMode('enhanced')}
+                className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors flex items-center space-x-1.5 ${
+                  viewMode === 'enhanced'
+                    ? 'bg-[#101D2E] text-[#80BCFF] border border-[#268BFF]/30'
+                    : 'text-[#98A9BD] hover:text-[#F5F8FC]'
+                }`}
+              >
+                <ImageIcon className="w-3.5 h-3.5" />
+                <span>Full Restored</span>
+              </button>
             </div>
           </div>
 
-          {/* Multi-Stage Audit Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="p-4 rounded-xl bg-[#0C1421] border border-[#1A2B40]">
-              <div className="flex items-center space-x-1.5 text-xs font-mono text-[#64758A] mb-1">
-                <Clock className="w-3.5 h-3.5 text-[#268BFF]" />
-                <span>TOTAL ELAPSED TIME</span>
+          {/* Main Visual Display */}
+          <div className="p-6 rounded-2xl bg-[#0C1421] border border-[#1A2B40] space-y-4">
+            {viewMode === 'slider' && (
+              <div className="rounded-xl overflow-hidden border border-[#1A2B40] bg-[#05070B]">
+                <ComparisonSlider
+                  originalSrc={result.original_image_url}
+                  processedSrc={result.active_output_url}
+                  originalLabel={`Original (${result.input_resolution})`}
+                  processedLabel={`Restored (${result.output_resolution})`}
+                  onViewFull={() => setShowFullModal(true)}
+                />
               </div>
-              <div className="text-lg font-bold text-[#F5F8FC] font-mono">
-                {result.total_elapsed_seconds}s
-              </div>
-              <div className="text-[11px] font-mono text-[#64758A] mt-1 truncate">
-                {result.device}
-              </div>
-            </div>
+            )}
 
-            <div className="p-4 rounded-xl bg-[#0C1421] border border-[#1A2B40]">
-              <div className="flex items-center space-x-1.5 text-xs font-mono text-[#64758A] mb-1">
-                <Layers className="w-3.5 h-3.5 text-[#25C98A]" />
-                <span>PIPELINE STAGES EXECUTED</span>
-              </div>
-              <div className="text-lg font-bold text-[#F5F8FC] font-mono">
-                {result.stages_executed.length} Stages
-              </div>
-              <div className="text-[11px] font-mono text-[#25C98A] mt-1">
-                {result.stages_executed.map((s) => s.stage).join(' → ')}
-              </div>
-            </div>
+            {viewMode === 'sideBySide' && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <div className="text-xs font-mono text-[#98A9BD] px-1">ORIGINAL ({result.input_resolution})</div>
+                  <div className="rounded-xl overflow-hidden border border-[#1A2B40] bg-[#05070B] p-2 flex items-center justify-center min-h-[300px]">
+                    <img
+                      src={result.original_image_url}
+                      alt="Original photograph"
+                      className="max-h-[480px] w-auto max-w-full object-contain mx-auto rounded-lg"
+                    />
+                  </div>
+                </div>
 
-            <div className="p-4 rounded-xl bg-[#0C1421] border border-[#1A2B40]">
-              <div className="flex items-center space-x-1.5 text-xs font-mono text-[#64758A] mb-1">
-                <Maximize2 className="w-3.5 h-3.5 text-[#80BCFF]" />
-                <span>RESOLUTION BOOST</span>
+                <div className="space-y-2">
+                  <div className="text-xs font-mono text-[#80BCFF] px-1">RESTORED ({result.output_resolution})</div>
+                  <div className="rounded-xl overflow-hidden border border-[#268BFF]/40 bg-[#05070B] p-2 flex items-center justify-center min-h-[300px]">
+                    <img
+                      src={result.active_output_url}
+                      alt="Restored output"
+                      className="max-h-[480px] w-auto max-w-full object-contain mx-auto rounded-lg"
+                    />
+                  </div>
+                </div>
               </div>
-              <div className="text-lg font-bold text-[#F5F8FC] font-mono">
-                {result.input_resolution} → {result.output_resolution}
+            )}
+
+            {viewMode === 'enhanced' && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-xs font-mono text-[#80BCFF] px-1">
+                  <span>RESTORED PHOTOGRAPH</span>
+                  <button
+                    type="button"
+                    onClick={() => setShowFullModal(true)}
+                    className="text-xs text-[#80BCFF] hover:underline flex items-center space-x-1"
+                  >
+                    <Maximize2 className="w-3.5 h-3.5" />
+                    <span>View Fullscreen</span>
+                  </button>
+                </div>
+                <div className="rounded-xl overflow-hidden border border-[#1A2B40] bg-[#05070B] p-3 flex items-center justify-center">
+                  <img
+                    src={result.active_output_url}
+                    alt="Restored output"
+                    className="max-h-[600px] w-auto max-w-full object-contain mx-auto rounded-lg cursor-zoom-in"
+                    onClick={() => setShowFullModal(true)}
+                    title="Click to view full size"
+                  />
+                </div>
               </div>
-              <div className="text-[11px] font-mono text-[#80BCFF] mt-1">
-                Mode: {result.mode.toUpperCase()}
-              </div>
-            </div>
+            )}
           </div>
 
           {/* Action & Download Bar */}
           <div className="p-6 rounded-2xl bg-[#0C1421] border border-[#1A2B40] flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div>
-              <div className="text-sm font-bold text-[#F5F8FC]">Download Smart Restored Output</div>
-              <div className="text-xs text-[#98A9BD] font-mono mt-0.5">
-                High-definition restored image with verified audit summary
-              </div>
+            <div className="text-center sm:text-left">
+              <h3 className="text-sm font-bold text-[#F5F8FC]">Smart Restoration Complete</h3>
+              <p className="text-xs text-[#98A9BD] mt-0.5">
+                Saved at {result.output_resolution} in {preferredFormat.toUpperCase()} format.
+              </p>
             </div>
 
             <div className="flex items-center space-x-3 w-full sm:w-auto">
               <a
-                href={result.final_output_url}
-                download={result.png_filename}
-                className="flex-1 sm:flex-initial px-4 py-2.5 rounded-xl bg-[#1769D2] hover:bg-[#268BFF] text-white text-xs font-mono font-semibold flex items-center justify-center space-x-1.5 transition-colors shadow-lg"
+                href={result.active_download_url}
+                download={result.active_download_name}
+                className="flex-1 sm:flex-initial px-6 py-3 rounded-xl bg-[#268BFF] hover:bg-[#1769D2] text-white text-xs font-bold flex items-center justify-center space-x-2 transition-all shadow-[0_0_15px_rgba(38,139,255,0.3)]"
               >
                 <Download className="w-4 h-4" />
-                <span>Download Image</span>
+                <span>Download Restored Image</span>
               </a>
 
-              <a
-                href={result.summary_url}
-                target="_blank"
-                rel="noreferrer"
-                download
-                className="flex-1 sm:flex-initial px-4 py-2.5 rounded-xl bg-[#101D2E] hover:bg-[#1A2B40] border border-[#1A2B40] text-[#80BCFF] text-xs font-mono font-semibold flex items-center justify-center space-x-1.5 transition-colors"
+              <button
+                type="button"
+                onClick={handleReset}
+                className="px-4 py-3 rounded-xl bg-[#101D2E] hover:bg-[#1A2B40] border border-[#1A2B40] text-xs font-medium text-[#98A9BD] hover:text-[#F5F8FC] transition-colors"
+                title="Restore another image"
               >
-                <FileText className="w-4 h-4" />
-                <span>Report (.txt)</span>
-              </a>
+                <RotateCcw className="w-4 h-4" />
+              </button>
             </div>
+          </div>
+
+          {/* Collapsible Technical Diagnostics */}
+          <div className="rounded-xl border border-[#1A2B40] bg-[#080D16] overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setShowDiagnostics(!showDiagnostics)}
+              className="w-full px-4 py-3 text-left text-xs font-mono text-[#64758A] hover:text-[#98A9BD] flex items-center justify-between transition-colors"
+            >
+              <span>Technical Diagnostics & Metadata</span>
+              {showDiagnostics ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            </button>
+
+            {showDiagnostics && (
+              <div className="p-4 border-t border-[#1A2B40] grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs font-mono text-[#98A9BD]">
+                <div>
+                  <div className="text-[#64758A] text-[10px]">TOTAL TIME</div>
+                  <div className="text-[#F5F8FC] font-bold">{result.total_elapsed_seconds}s</div>
+                </div>
+                <div>
+                  <div className="text-[#64758A] text-[10px]">STAGES EXECUTED</div>
+                  <div className="text-[#F5F8FC] font-bold">{result.stages_executed?.length || 2} stages</div>
+                </div>
+                <div>
+                  <div className="text-[#64758A] text-[10px]">DEVICE</div>
+                  <div className="text-[#F5F8FC] font-bold truncate">{result.device}</div>
+                </div>
+                <div>
+                  <div className="text-[#64758A] text-[10px]">RESOLUTION BOOST</div>
+                  <div className="text-[#F5F8FC] font-bold">{result.output_resolution}</div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Fullscreen Lightbox Modal */}
+      {showFullModal && result && (
+        <div
+          className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md p-4 flex flex-col items-center justify-center animate-in fade-in duration-200"
+          onClick={() => setShowFullModal(false)}
+        >
+          <div className="absolute top-4 right-4 flex items-center space-x-3 z-10">
+            <a
+              href={result.active_download_url}
+              download={result.active_download_name}
+              onClick={(e) => e.stopPropagation()}
+              className="px-3.5 py-1.5 rounded-xl bg-[#268BFF] text-white text-xs font-medium flex items-center space-x-1.5 shadow-md"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Download</span>
+            </a>
+            <button
+              onClick={() => setShowFullModal(false)}
+              className="p-2 rounded-xl bg-[#101D2E] text-[#98A9BD] hover:text-[#F5F8FC] border border-[#1A2B40] transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          <div
+            className="max-w-[95vw] max-h-[90vh] overflow-auto flex items-center justify-center p-2"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <img
+              src={result.active_output_url}
+              alt="Restored Full Resolution"
+              className="max-h-[88vh] w-auto max-w-full object-contain rounded-xl shadow-2xl"
+            />
           </div>
         </div>
       )}
     </div>
   );
 }
-

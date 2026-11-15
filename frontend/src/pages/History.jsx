@@ -114,13 +114,11 @@ export default function History() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#1A2B40] pb-6">
         <div>
-          <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-[#101D2E] border border-[#1A2B40] text-xs font-mono text-[#80BCFF] mb-2">
-            <HistoryIcon className="w-3.5 h-3.5 text-[#268BFF]" />
-            <span>AUDIT LOG & VERIFICATION ARCHIVE</span>
-          </div>
-          <h1 className="text-3xl font-extrabold text-[#F5F8FC] tracking-tight">Processing History</h1>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-[#F5F8FC] tracking-tight">
+            Processing History
+          </h1>
           <p className="text-sm text-[#98A9BD] mt-1">
-            Persisted SQLite audit trail of all model inference runs, hardware devices, timings, and generated assets.
+            Browse, inspect, and download past image and video restorations.
           </p>
         </div>
 

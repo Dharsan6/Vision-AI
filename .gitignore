@@ -43,6 +43,8 @@ storage/uploads/*
 !storage/uploads/.gitkeep
 storage/outputs/*
 !storage/outputs/.gitkeep
+storage/samples/showcase_*
+storage/samples/studio_thumb_*
 
 # 6. Temporary Files & Local Scratch Space
 storage/temp/*

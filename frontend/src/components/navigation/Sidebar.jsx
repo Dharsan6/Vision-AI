@@ -7,14 +7,13 @@ import {
   Sparkles,
   History,
   Info,
-  Cpu,
   ArrowUpRight,
   Eye,
   Maximize2,
   Wand2,
 } from 'lucide-react';
 
-export default function Sidebar({ systemStatus }) {
+export default function Sidebar() {
   const navItems = [
     { to: '/app/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { to: '/app/smart-restore', label: 'Smart Restore', icon: Wand2, highlight: true },
@@ -26,20 +25,18 @@ export default function Sidebar({ systemStatus }) {
     { to: '/app/about', label: 'About Project', icon: Info },
   ];
 
-  const isMps = systemStatus?.device === 'mps';
-
   return (
     <aside className="w-64 border-r border-[#1A2B40] bg-[#080D16] flex flex-col justify-between shrink-0 h-screen sticky top-0">
       <div>
         {/* Brand Header */}
         <div className="p-6 border-b border-[#1A2B40]">
           <Link to="/" className="flex items-center space-x-3 group">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#1769D2] to-[#268BFF] flex items-center justify-center shadow-[0_0_15px_rgba(38,139,255,0.4)] group-hover:scale-105 transition-transform">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-[#1769D2] to-[#268BFF] flex items-center justify-center shadow-[0_0_15px_rgba(38,139,255,0.4)] group-hover:scale-105 transition-transform">
               <Eye className="w-5 h-5 text-white" />
             </div>
             <div>
-              <span className="font-extrabold text-lg tracking-wider text-[#F5F8FC]">VISION AI</span>
-              <span className="block text-[10px] font-mono tracking-widest text-[#80BCFF]">DEEP LEARNING</span>
+              <span className="font-extrabold text-base tracking-wider text-[#F5F8FC]">VISION AI</span>
+              <span className="block text-[10px] font-medium tracking-wider text-[#80BCFF]">STUDIO PLATFORM</span>
             </div>
           </Link>
         </div>
@@ -65,8 +62,8 @@ export default function Sidebar({ systemStatus }) {
                   <span className="truncate">{item.label}</span>
                 </div>
                 {item.highlight && (
-                  <span className="text-[9px] font-mono tracking-wider px-1.5 py-0.5 rounded bg-[#1769D2]/30 text-[#80BCFF] border border-[#268BFF]/30 shrink-0">
-                    AI
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#101D2E] text-[#80BCFF] border border-[#268BFF]/40 shrink-0">
+                    Auto
                   </span>
                 )}
               </NavLink>
@@ -75,36 +72,24 @@ export default function Sidebar({ systemStatus }) {
         </nav>
       </div>
 
-      {/* Footer / Hardware Telemetry */}
-      <div className="p-4 border-t border-[#1A2B40] space-y-3">
-        {/* Device Status Card */}
-        <div className="p-3 rounded-xl bg-[#0C1421] border border-[#1A2B40]">
-          <div className="flex items-center justify-between text-xs font-mono text-[#98A9BD] mb-1.5">
-            <span className="flex items-center space-x-1.5">
-              <Cpu className="w-3.5 h-3.5 text-[#268BFF]" />
-              <span>COMPUTE ENGINE</span>
-            </span>
-            <span className={`w-2 h-2 rounded-full ${isMps ? 'bg-[#25C98A]' : 'bg-[#F0B44C]'}`} />
-          </div>
-          <div className="text-xs font-medium text-[#F5F8FC] truncate">
-            {systemStatus?.device_name || 'Detecting hardware...'}
-          </div>
-          <div className="text-[11px] font-mono text-[#64758A] mt-1 flex justify-between">
-            <span>RAM: {systemStatus?.memory?.used_gb || 0} / {systemStatus?.memory?.total_gb || 16} GB</span>
-            <span>{systemStatus?.memory?.percent_used || 0}%</span>
+      {/* Footer Status & Overview Link */}
+      <div className="p-4 border-t border-[#1A2B40] space-y-2">
+        <div className="flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-[#0C1421] border border-[#1A2B40] text-xs">
+          <div className="flex items-center space-x-2">
+            <span className="w-2 h-2 rounded-full bg-[#25C98A]" />
+            <span className="text-[#98A9BD]">Status:</span>
+            <span className="font-medium text-[#F5F8FC]">Ready</span>
           </div>
         </div>
 
-        {/* Back to Landing Link */}
         <Link
           to="/"
-          className="flex items-center justify-between px-3.5 py-2 rounded-xl text-xs font-mono text-[#98A9BD] hover:text-[#268BFF] hover:bg-[#0C1421] transition-colors"
+          className="flex items-center justify-between px-3.5 py-2 rounded-xl text-xs font-medium text-[#98A9BD] hover:text-[#268BFF] hover:bg-[#0C1421] transition-colors"
         >
-          <span>Landing Page</span>
+          <span>Return to Overview</span>
           <ArrowUpRight className="w-3.5 h-3.5" />
         </Link>
       </div>
     </aside>
   );
 }
-

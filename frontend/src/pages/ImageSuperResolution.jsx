@@ -3,18 +3,18 @@ import {
   Sparkles,
   Download,
   RotateCcw,
-  Cpu,
-  Clock,
-  Layers,
+  ZoomIn,
   CheckCircle2,
   AlertCircle,
+  Eye,
+  X,
+  Sliders,
   Maximize2,
-  FileImage,
-  ZoomIn,
-  XCircle,
-  AlertTriangle,
-  Gauge,
-  Activity,
+  ChevronDown,
+  ChevronUp,
+  Image as ImageIcon,
+  Columns,
+  Layers,
 } from 'lucide-react';
 import FileDropzone from '../components/upload/FileDropzone';
 import ComparisonSlider from '../components/comparison/ComparisonSlider';
@@ -24,29 +24,23 @@ export default function ImageSuperResolution() {
   const [selectedFile, setSelectedFile] = useState(null);
   const [imageMeta, setImageMeta] = useState(null);
   const [scale, setScale] = useState(4); // 2 or 4
-  const [preferredFormat, setPreferredFormat] = useState('png');
-  const [maxDimension, setMaxDimension] = useState(0); // 0 = unconstrained / original
+  const [strength, setStrength] = useState('strong'); // 'balanced' or 'strong'
+  const [preferredFormat, setPreferredFormat] = useState('png'); // 'png' or 'jpg'
+  const [maxDimension, setMaxDimension] = useState(0);
+
   const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [currentStep, setCurrentStep] = useState('');
+  const [jobId, setJobId] = useState(null);
   const [error, setError] = useState(null);
   const [result, setResult] = useState(null);
 
-  // Background Job tracking state
-  const [jobState, setJobState] = useState({
-    jobId: null,
-    status: 'idle', // idle, queued, processing, completed, failed, cancelled
-    progress: 0,
-    currentStep: '',
-    currentFrame: 0,
-    totalFrames: 0,
-    elapsedSeconds: 0,
-    device: 'Apple Silicon (MPS)',
-    inputResolution: '',
-    fileSizeMB: 0,
-  });
+  // Results View Mode: 'slider' | 'sideBySide' | 'enhanced'
+  const [viewMode, setViewMode] = useState('slider');
+  const [showFullModal, setShowFullModal] = useState(false);
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
 
-  const timerRef = useRef(null);
-
-  // When a file is selected, inspect dimensions locally
+  // Inspect dimensions when file is selected
   const handleFileSelect = (file) => {
     setSelectedFile(file);
     setResult(null);
@@ -59,17 +53,12 @@ export default function ImageSuperResolution() {
       img.onload = () => {
         const w = img.naturalWidth || img.width;
         const h = img.naturalHeight || img.height;
-        const mp = (w * h) / 1000000;
-        const tilesX = Math.ceil(w / 512);
-        const tilesY = Math.ceil(h / 512);
         setImageMeta({
           width: w,
           height: h,
           aspectRatio: (w / h).toFixed(2),
-          megapixels: mp.toFixed(2),
           sizeMB: (file.size / (1024 * 1024)).toFixed(2),
-          estTiles: tilesX * tilesY,
-          isLarge: w > 2000 || h > 2000 || mp > 4.0,
+          isLarge: w > 2400 || h > 2400,
         });
         URL.revokeObjectURL(url);
       };
@@ -78,146 +67,124 @@ export default function ImageSuperResolution() {
     }
   };
 
+  // Pre-verify that the generated image loads in the browser before displaying
+  const verifyImagePreload = (src) => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(true);
+      img.onerror = () => reject(new Error('Enhanced image could not be loaded from server.'));
+      img.src = src;
+    });
+  };
+
   const handleSuperResolve = async () => {
     if (!selectedFile) return;
 
     setLoading(true);
     setError(null);
     setResult(null);
-
-    const startTime = Date.now();
-    setJobState({
-      jobId: null,
-      status: 'queued',
-      progress: 2,
-      currentStep: 'Uploading source image to background inference pipeline...',
-      currentFrame: 0,
-      totalFrames: imageMeta?.estTiles || 1,
-      elapsedSeconds: 0,
-      device: 'Apple Silicon (MPS Acceleration)',
-      inputResolution: imageMeta ? `${imageMeta.width}x${imageMeta.height}` : '',
-      fileSizeMB: imageMeta ? imageMeta.sizeMB : (selectedFile.size / (1024 * 1024)).toFixed(2),
-    });
-
-    // Start local elapsed timer
-    if (timerRef.current) clearInterval(timerRef.current);
-    timerRef.current = setInterval(() => {
-      setJobState((prev) => ({
-        ...prev,
-        elapsedSeconds: Math.floor((Date.now() - startTime) / 1000),
-      }));
-    }, 500);
+    setProgress(5);
+    setCurrentStep('Preparing source image for enhancement...');
 
     try {
       const res = await api.enhanceImage(
         selectedFile,
         scale,
+        strength,
         preferredFormat,
         maxDimension,
         (job) => {
-          // On progress callback from background job poller
-          setJobState((prev) => ({
-            ...prev,
-            jobId: job.job_id || prev.jobId,
-            status: job.status,
-            progress: job.progress || prev.progress,
-            currentStep: job.current_step || prev.currentStep,
-            currentFrame: job.current_frame || prev.currentFrame,
-            totalFrames: job.total_frames || prev.totalFrames,
-            device: job.device || prev.device,
-            inputResolution: job.input_resolution || prev.inputResolution,
-            fileSizeMB: job.file_size_mb || prev.fileSizeMB,
-          }));
+          if (job.job_id) setJobId(job.job_id);
+          if (job.progress !== undefined) setProgress(Math.round(job.progress));
+          if (job.current_step) setCurrentStep(job.current_step);
         }
       );
 
+      // Verify that output file exists and can be decoded by the browser
+      const outputUrl =
+        res.enhanced_url ||
+        res.output_url ||
+        (preferredFormat === 'png' ? res.png_url : res.jpg_url);
+
+      if (!outputUrl) {
+        throw new Error('Server completed processing but returned an invalid output URL.');
+      }
+
+      setCurrentStep('Verifying generated high-resolution image...');
+      setProgress(98);
+
+      await verifyImagePreload(outputUrl);
+
+      // Normalise output properties
+      res.active_output_url = outputUrl;
+      res.active_download_url =
+        res.download_url ||
+        `/api/media/download/${preferredFormat === 'png' ? res.png_filename : res.jpg_filename}`;
+      res.active_download_name =
+        res.download_name ||
+        `enhanced_${scale}x_${selectedFile.name.replace(/\.[^/.]+$/, '')}.${preferredFormat}`;
+
       setResult(res);
-      setJobState((prev) => ({
-        ...prev,
-        status: 'completed',
-        progress: 100,
-        currentStep: 'Enhancement complete.',
-      }));
+      setProgress(100);
+      setCurrentStep('Enhancement complete.');
     } catch (err) {
       console.error('Image super-resolution error:', err);
       const isCancelled = err.message?.includes('cancelled');
       if (isCancelled) {
-        setJobState((prev) => ({
-          ...prev,
-          status: 'cancelled',
-          currentStep: 'Job was cancelled by user.',
-        }));
+        setError('The enhancement process was cancelled.');
       } else {
-        setError(err.response?.data?.detail || err.message || 'Image super-resolution failed');
-        setJobState((prev) => ({
-          ...prev,
-          status: 'failed',
-          currentStep: err.response?.data?.detail || err.message || 'Job failed',
-        }));
+        setError(
+          err.response?.data?.detail ||
+            err.message ||
+            'Super-resolution failed. Please check your image and try again.'
+        );
       }
     } finally {
-      if (timerRef.current) clearInterval(timerRef.current);
       setLoading(false);
     }
   };
 
   const handleCancelJob = async () => {
-    if (!jobState.jobId) {
+    if (!jobId) {
       setLoading(false);
       return;
     }
     try {
-      await api.cancelJob(jobState.jobId);
+      await api.cancelJob(jobId);
     } catch (e) {
       console.warn('Failed to send cancel signal:', e);
     }
   };
 
   const handleReset = () => {
-    if (timerRef.current) clearInterval(timerRef.current);
     setSelectedFile(null);
     setImageMeta(null);
     setResult(null);
     setError(null);
-    setJobState({
-      jobId: null,
-      status: 'idle',
-      progress: 0,
-      currentStep: '',
-      currentFrame: 0,
-      totalFrames: 0,
-      elapsedSeconds: 0,
-      device: 'Apple Silicon (MPS)',
-      inputResolution: '',
-      fileSizeMB: 0,
-    });
+    setProgress(0);
+    setCurrentStep('');
+    setJobId(null);
+    setViewMode('slider');
+    setShowFullModal(false);
   };
 
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, []);
-
   return (
-    <div className="space-y-8 max-w-5xl mx-auto">
+    <div className="space-y-8 max-w-4xl mx-auto">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#1A2B40] pb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#1A2B40] pb-6">
         <div>
-          <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-[#101D2E] border border-[#1A2B40] text-xs font-mono text-[#80BCFF] mb-2">
-            <Sparkles className="w-3.5 h-3.5 text-[#268BFF]" />
-            <span>REAL-ESRGAN RRDBNET ARCHITECTURE</span>
-          </div>
-          <h1 className="text-3xl font-extrabold text-[#F5F8FC] tracking-tight">Image Super-Resolution Studio</h1>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-[#F5F8FC] tracking-tight">
+            Image Super-Resolution
+          </h1>
           <p className="text-sm text-[#98A9BD] mt-1">
-            Reconstruct sub-pixel high-frequency textures and upscale images by 2x or 4x with asynchronous streaming inference.
+            Upscale low-resolution photographs and reconstruct fine texture details with deep learning.
           </p>
         </div>
 
         {result && (
           <button
             onClick={handleReset}
-            className="px-4 py-2 rounded-xl bg-[#0C1421] hover:bg-[#101D2E] border border-[#1A2B40] text-xs font-mono text-[#98A9BD] hover:text-[#F5F8FC] flex items-center space-x-2 transition-colors self-start md:self-auto"
+            className="px-4 py-2 rounded-xl bg-[#0C1421] hover:bg-[#101D2E] border border-[#1A2B40] text-xs font-medium text-[#98A9BD] hover:text-[#F5F8FC] flex items-center space-x-2 transition-colors self-start sm:self-auto shadow-sm"
           >
             <RotateCcw className="w-3.5 h-3.5" />
             <span>Process Another Image</span>
@@ -227,421 +194,450 @@ export default function ImageSuperResolution() {
 
       {/* Main Workflow: Upload & Controls */}
       {!result ? (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Upload Area */}
-          <div className="lg:col-span-2 space-y-6">
-            <div className="p-6 rounded-2xl bg-[#0C1421] border border-[#1A2B40] space-y-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-sm font-semibold text-[#F5F8FC] uppercase tracking-wider font-mono">
-                  1. Select Source Image
-                </h2>
-                {imageMeta && (
-                  <span className="text-xs font-mono text-[#80BCFF] bg-[#101D2E] px-2.5 py-0.5 rounded-full border border-[#1A2B40]">
-                    {imageMeta.width} × {imageMeta.height} ({imageMeta.megapixels} MP)
-                  </span>
-                )}
-              </div>
-
-              <FileDropzone
-                file={selectedFile}
-                onFileSelect={handleFileSelect}
-                accept="image/png,image/jpeg,image/webp,image/bmp,image/tiff"
-                acceptType="image"
-                maxSizeMB={50}
-                sampleUrl="/storage/samples/sample_portrait_gray.jpg"
-                sampleLabel="Load Benchmark Sample Image"
-              />
-
-              {/* Large Image Adaptive Notification */}
-              {imageMeta?.isLarge && (
-                <div className="p-4 rounded-xl bg-[#101D2E]/80 border border-[#268BFF]/30 space-y-2 text-xs font-mono">
-                  <div className="flex items-center space-x-2 text-[#80BCFF] font-semibold">
-                    <AlertTriangle className="w-4 h-4 text-[#268BFF] shrink-0" />
-                    <span>High-Resolution Source Detected ({imageMeta.width} × {imageMeta.height}, {imageMeta.megapixels} MP)</span>
-                  </div>
-                  <p className="text-[#98A9BD]">
-                    At {scale}x scaling, the output will reach ~{imageMeta.width * scale} × {imageMeta.height * scale} (
-                    {(imageMeta.megapixels * scale * scale).toFixed(1)} MP) across ~{imageMeta.estTiles} feature tiles. Processing runs
-                    asynchronously with live progress tracking and zero OOM memory guarantees.
-                  </p>
-                </div>
+        <div className="space-y-6">
+          {/* 1. Upload Card */}
+          <div className="p-6 rounded-2xl bg-[#0C1421] border border-[#1A2B40] space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-[#80BCFF] uppercase tracking-wider font-mono">
+                Source Image
+              </span>
+              {imageMeta && (
+                <span className="text-xs font-mono text-[#98A9BD] bg-[#080D16] px-2.5 py-1 rounded-full border border-[#1A2B40]">
+                  {imageMeta.width} × {imageMeta.height} px · {imageMeta.sizeMB} MB
+                </span>
               )}
             </div>
 
-            {/* Active Live Progress Card (Shown while processing) */}
-            {loading && (
-              <div className="p-6 rounded-2xl bg-[#0C1421] border border-[#268BFF]/40 shadow-[0_0_30px_rgba(38,139,255,0.15)] space-y-5 animate-in fade-in duration-300">
-                <div className="flex items-center justify-between border-b border-[#1A2B40] pb-4">
-                  <div className="flex items-center space-x-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-[#268BFF] animate-ping" />
-                    <span className="text-sm font-bold font-mono text-[#F5F8FC]">
-                      BACKGROUND INFERENCE RUNNING
-                    </span>
-                  </div>
-                  <div className="flex items-center space-x-3 text-xs font-mono">
-                    <span className="text-[#80BCFF] flex items-center space-x-1">
-                      <Clock className="w-3.5 h-3.5" />
-                      <span>{jobState.elapsedSeconds}s elapsed</span>
-                    </span>
-                    <button
-                      type="button"
-                      onClick={handleCancelJob}
-                      className="px-2.5 py-1 rounded-lg bg-[#F06464]/10 hover:bg-[#F06464]/20 border border-[#F06464]/30 text-[#F06464] text-xs font-mono transition-colors flex items-center space-x-1"
-                    >
-                      <XCircle className="w-3.5 h-3.5" />
-                      <span>Cancel</span>
-                    </button>
-                  </div>
-                </div>
+            <FileDropzone
+              file={selectedFile}
+              onFileSelect={handleFileSelect}
+              accept="image/jpeg,image/png,image/webp,image/bmp"
+              acceptType="image"
+              maxSizeMB={50}
+              sampleUrl="/storage/samples/sample_portrait_gray.jpg"
+              sampleLabel="Load Test Sample (Portrait 512×512)"
+            />
 
-                {/* Progress bar */}
-                <div className="space-y-2">
-                  <div className="flex justify-between text-xs font-mono">
-                    <span className="text-[#80BCFF] font-medium">{jobState.currentStep || 'Processing neural tiles...'}</span>
-                    <span className="text-[#F5F8FC] font-bold">{Math.round(jobState.progress)}%</span>
-                  </div>
-                  <div className="w-full h-3 rounded-full bg-[#080D16] border border-[#1A2B40] overflow-hidden p-0.5">
-                    <div
-                      className="h-full rounded-full bg-gradient-to-r from-[#1769D2] via-[#268BFF] to-[#80BCFF] transition-all duration-300 shadow-[0_0_12px_rgba(38,139,255,0.6)]"
-                      style={{ width: `${Math.max(5, jobState.progress)}%` }}
-                    />
-                  </div>
-                </div>
-
-                {/* Stage checklist */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs font-mono">
-                  <div className="p-3 rounded-xl bg-[#080D16] border border-[#1A2B40] space-y-1">
-                    <div className="text-[#64758A] text-[10px]">STAGE 1</div>
-                    <div className="text-[#80BCFF] font-semibold flex items-center space-x-1">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-[#25C98A]" />
-                      <span>Upload & Check</span>
-                    </div>
-                    <div className="text-[11px] text-[#98A9BD]">{jobState.fileSizeMB} MB ({jobState.inputResolution})</div>
-                  </div>
-
-                  <div className="p-3 rounded-xl bg-[#080D16] border border-[#1A2B40] space-y-1">
-                    <div className="text-[#64758A] text-[10px]">STAGE 2</div>
-                    <div className="text-[#80BCFF] font-semibold flex items-center space-x-1">
-                      {jobState.progress >= 5 ? (
-                        <CheckCircle2 className="w-3.5 h-3.5 text-[#25C98A]" />
-                      ) : (
-                        <span className="w-3.5 h-3.5 rounded-full border-2 border-white/20 border-t-[#268BFF] animate-spin" />
-                      )}
-                      <span>Model Prep</span>
-                    </div>
-                    <div className="text-[11px] text-[#98A9BD]">RRDBNet 23-Block</div>
-                  </div>
-
-                  <div className="p-3 rounded-xl bg-[#080D16] border border-[#1A2B40] space-y-1">
-                    <div className="text-[#64758A] text-[10px]">STAGE 3</div>
-                    <div className="text-[#80BCFF] font-semibold flex items-center space-x-1">
-                      {jobState.progress >= 92 ? (
-                        <CheckCircle2 className="w-3.5 h-3.5 text-[#25C98A]" />
-                      ) : (
-                        <span className="w-3.5 h-3.5 rounded-full border-2 border-white/20 border-t-[#268BFF] animate-spin" />
-                      )}
-                      <span>Tiled Inference</span>
-                    </div>
-                    <div className="text-[11px] text-[#98A9BD]">
-                      Tile {jobState.currentFrame} / {jobState.totalFrames || 1}
-                    </div>
-                  </div>
-
-                  <div className="p-3 rounded-xl bg-[#080D16] border border-[#1A2B40] space-y-1">
-                    <div className="text-[#64758A] text-[10px]">STAGE 4</div>
-                    <div className="text-[#80BCFF] font-semibold flex items-center space-x-1">
-                      {jobState.progress >= 98 ? (
-                        <CheckCircle2 className="w-3.5 h-3.5 text-[#25C98A]" />
-                      ) : (
-                        <span className="w-3.5 h-3.5 rounded-full border-2 border-white/20 border-t-[#268BFF] animate-spin" />
-                      )}
-                      <span>Encoding</span>
-                    </div>
-                    <div className="text-[11px] text-[#98A9BD]">PNG & JPG outputs</div>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between text-xs font-mono text-[#64758A] pt-2 border-t border-[#1A2B40]">
-                  <span className="flex items-center space-x-1.5">
-                    <Cpu className="w-3.5 h-3.5 text-[#268BFF]" />
-                    <span>{jobState.device}</span>
-                  </span>
-                  <span>512px Streaming Tiles (Zero Memory OOM)</span>
-                </div>
-              </div>
+            {imageMeta?.isLarge && (
+              <p className="text-xs text-[#98A9BD] bg-[#080D16] p-3 rounded-xl border border-[#1A2B40]">
+                High-resolution image detected ({imageMeta.width} × {imageMeta.height} px). The image will be processed seamlessly in memory-safe tiles.
+              </p>
             )}
           </div>
 
-          {/* Configuration Card */}
-          <div className="space-y-6">
-            <div className="p-6 rounded-2xl bg-[#0C1421] border border-[#1A2B40] space-y-5">
-              <h2 className="text-sm font-semibold text-[#F5F8FC] uppercase tracking-wider font-mono">
-                2. Upscaling Options
-              </h2>
+          {/* 2. Enhancement Settings Card */}
+          <div className="p-6 rounded-2xl bg-[#0C1421] border border-[#1A2B40] space-y-6">
+            <div className="text-xs font-semibold text-[#80BCFF] uppercase tracking-wider font-mono">
+              Enhancement Settings
+            </div>
 
-              {/* Scale Selector */}
-              <div>
-                <label className="block text-xs font-mono text-[#98A9BD] mb-2">SCALING FACTOR</label>
-                <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {/* Upscaling Factor */}
+              <div className="space-y-2">
+                <label className="block text-xs font-medium text-[#F5F8FC]">Upscaling Factor</label>
+                <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
                     disabled={loading}
                     onClick={() => setScale(2)}
-                    className={`py-3 px-3 rounded-xl border text-xs font-mono transition-all flex flex-col items-center justify-center space-y-1 ${
+                    className={`py-3 px-3 rounded-xl border text-center transition-all ${
                       scale === 2
-                        ? 'border-[#268BFF] bg-[#101D2E] text-[#80BCFF] shadow-[0_0_15px_rgba(38,139,255,0.2)]'
+                        ? 'border-[#268BFF] bg-[#101D2E] text-[#80BCFF] shadow-sm'
                         : 'border-[#1A2B40] bg-[#080D16] text-[#98A9BD] hover:bg-[#101D2E]'
                     }`}
                   >
-                    <span className="text-base font-bold">2x Factor</span>
-                    <span className="text-[10px] text-[#64758A]">Fast 200% Upscale</span>
+                    <div className="text-sm font-bold">2× Upscale</div>
+                    <div className="text-[11px] text-[#64758A]">200% resolution</div>
                   </button>
 
                   <button
                     type="button"
                     disabled={loading}
                     onClick={() => setScale(4)}
-                    className={`py-3 px-3 rounded-xl border text-xs font-mono transition-all flex flex-col items-center justify-center space-y-1 ${
+                    className={`py-3 px-3 rounded-xl border text-center transition-all ${
                       scale === 4
-                        ? 'border-[#268BFF] bg-[#101D2E] text-[#80BCFF] shadow-[0_0_15px_rgba(38,139,255,0.2)]'
+                        ? 'border-[#268BFF] bg-[#101D2E] text-[#80BCFF] shadow-sm'
                         : 'border-[#1A2B40] bg-[#080D16] text-[#98A9BD] hover:bg-[#101D2E]'
                     }`}
                   >
-                    <span className="text-base font-bold">4x Factor</span>
-                    <span className="text-[10px] text-[#64758A]">Ultra 400% Super-Res</span>
+                    <div className="text-sm font-bold">4× Upscale</div>
+                    <div className="text-[11px] text-[#64758A]">400% resolution</div>
                   </button>
                 </div>
               </div>
 
-              {/* Optional Processing Resolution Limit */}
-              {imageMeta?.isLarge && (
-                <div>
-                  <label className="block text-xs font-mono text-[#98A9BD] mb-2">PROCESSING RESOLUTION</label>
-                  <div className="grid grid-cols-2 gap-2 text-xs font-mono">
-                    <button
-                      type="button"
-                      disabled={loading}
-                      onClick={() => setMaxDimension(0)}
-                      className={`p-2.5 rounded-xl border text-left transition-all ${
-                        maxDimension === 0
-                          ? 'border-[#268BFF] bg-[#101D2E] text-[#80BCFF]'
-                          : 'border-[#1A2B40] bg-[#080D16] text-[#98A9BD] hover:bg-[#101D2E]'
-                      }`}
-                    >
-                      <div className="font-bold">Original Resolution</div>
-                      <div className="text-[10px] text-[#64758A]">Full quality (unlimited)</div>
-                    </button>
+              {/* Detail Strength */}
+              <div className="space-y-2">
+                <label className="block text-xs font-medium text-[#F5F8FC]">Detail Mode</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    disabled={loading}
+                    onClick={() => setStrength('balanced')}
+                    className={`py-3 px-3 rounded-xl border text-center transition-all ${
+                      strength === 'balanced'
+                        ? 'border-[#268BFF] bg-[#101D2E] text-[#80BCFF] shadow-sm'
+                        : 'border-[#1A2B40] bg-[#080D16] text-[#98A9BD] hover:bg-[#101D2E]'
+                    }`}
+                  >
+                    <div className="text-sm font-bold">Balanced</div>
+                    <div className="text-[11px] text-[#64758A]">Natural clarity</div>
+                  </button>
 
-                    <button
-                      type="button"
-                      disabled={loading}
-                      onClick={() => setMaxDimension(2048)}
-                      className={`p-2.5 rounded-xl border text-left transition-all ${
-                        maxDimension === 2048
-                          ? 'border-[#268BFF] bg-[#101D2E] text-[#80BCFF]'
-                          : 'border-[#1A2B40] bg-[#080D16] text-[#98A9BD] hover:bg-[#101D2E]'
-                      }`}
-                    >
-                      <div className="font-bold">Cap at 2048px</div>
-                      <div className="text-[10px] text-[#64758A]">Faster processing</div>
-                    </button>
-                  </div>
+                  <button
+                    type="button"
+                    disabled={loading}
+                    onClick={() => setStrength('strong')}
+                    className={`py-3 px-3 rounded-xl border text-center transition-all ${
+                      strength === 'strong'
+                        ? 'border-[#268BFF] bg-[#101D2E] text-[#80BCFF] shadow-sm'
+                        : 'border-[#1A2B40] bg-[#080D16] text-[#98A9BD] hover:bg-[#101D2E]'
+                    }`}
+                  >
+                    <div className="text-sm font-bold">Strong</div>
+                    <div className="text-[11px] text-[#64758A]">Maximum detail</div>
+                  </button>
                 </div>
-              )}
+              </div>
 
-              {/* Preferred Format */}
-              <div>
-                <label className="block text-xs font-mono text-[#98A9BD] mb-2">OUTPUT FORMAT</label>
-                <div className="grid grid-cols-2 gap-3">
+              {/* Output Format */}
+              <div className="space-y-2">
+                <label className="block text-xs font-medium text-[#F5F8FC]">Output Format</label>
+                <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
                     disabled={loading}
                     onClick={() => setPreferredFormat('png')}
-                    className={`py-2 px-3 rounded-xl border text-xs font-mono transition-all text-center ${
+                    className={`py-3 px-3 rounded-xl border text-center transition-all ${
                       preferredFormat === 'png'
-                        ? 'border-[#268BFF] bg-[#101D2E] text-[#80BCFF]'
+                        ? 'border-[#268BFF] bg-[#101D2E] text-[#80BCFF] shadow-sm'
                         : 'border-[#1A2B40] bg-[#080D16] text-[#98A9BD] hover:bg-[#101D2E]'
                     }`}
                   >
-                    PNG (Lossless)
+                    <div className="text-sm font-bold">PNG</div>
+                    <div className="text-[11px] text-[#64758A]">Lossless quality</div>
                   </button>
+
                   <button
                     type="button"
                     disabled={loading}
                     onClick={() => setPreferredFormat('jpg')}
-                    className={`py-2 px-3 rounded-xl border text-xs font-mono transition-all text-center ${
+                    className={`py-3 px-3 rounded-xl border text-center transition-all ${
                       preferredFormat === 'jpg'
-                        ? 'border-[#268BFF] bg-[#101D2E] text-[#80BCFF]'
+                        ? 'border-[#268BFF] bg-[#101D2E] text-[#80BCFF] shadow-sm'
                         : 'border-[#1A2B40] bg-[#080D16] text-[#98A9BD] hover:bg-[#101D2E]'
                     }`}
                   >
-                    JPG (Optimized)
+                    <div className="text-sm font-bold">JPG</div>
+                    <div className="text-[11px] text-[#64758A]">Optimized size</div>
                   </button>
                 </div>
               </div>
+            </div>
 
-              {/* AI Architecture Info */}
-              <div className="p-3.5 rounded-xl bg-[#080D16] border border-[#1A2B40] space-y-1.5 text-xs font-mono text-[#64758A]">
-                <div className="text-[#80BCFF] font-medium">Model Specifications:</div>
-                <div>• Architecture: RRDBNet (23 blocks)</div>
-                <div>• Feature tiles: 512px with 10px overlap</div>
-                <div>• Background job polling with cancellation</div>
-                <div>• Apple Silicon MPS Acceleration</div>
-              </div>
-
-              {/* Run Button */}
+            {/* Primary Action Button */}
+            <div className="pt-2">
               <button
                 type="button"
                 disabled={!selectedFile || loading}
                 onClick={handleSuperResolve}
-                className="w-full py-3.5 rounded-xl bg-gradient-to-r from-[#1769D2] to-[#268BFF] hover:from-[#268BFF] hover:to-[#80BCFF] disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-sm tracking-wide shadow-[0_0_20px_rgba(38,139,255,0.4)] transition-all flex items-center justify-center space-x-2"
+                className="w-full py-4 rounded-xl bg-[#268BFF] hover:bg-[#1769D2] disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-sm tracking-wide shadow-[0_0_20px_rgba(38,139,255,0.3)] transition-all flex items-center justify-center space-x-2"
               >
                 {loading ? (
                   <>
                     <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    <span>Inference in Progress ({jobState.progress}%)...</span>
+                    <span>Enhancing Image ({progress}%)...</span>
                   </>
                 ) : (
                   <>
-                    <ZoomIn className="w-4 h-4" />
-                    <span>Upscale Image ({scale}x)</span>
+                    <Sparkles className="w-4 h-4" />
+                    <span>Enhance Image ({scale}×)</span>
                   </>
                 )}
               </button>
-
-              {/* Error Banner with Retry */}
-              {error && (
-                <div className="p-4 rounded-xl bg-[#F06464]/10 border border-[#F06464]/30 space-y-2 text-xs font-mono text-[#F06464]">
-                  <div className="flex items-center space-x-2 font-semibold">
-                    <AlertCircle className="w-4 h-4 shrink-0" />
-                    <span>Inference Error</span>
-                  </div>
-                  <p className="text-xs text-[#F06464]/90">{error}</p>
-                  <button
-                    type="button"
-                    onClick={handleSuperResolve}
-                    className="mt-1 px-3 py-1 rounded-lg bg-[#F06464]/20 hover:bg-[#F06464]/30 border border-[#F06464]/40 text-white font-semibold transition-colors"
-                  >
-                    Retry Enhancement
-                  </button>
-                </div>
-              )}
-
-              {/* Cancelled Banner */}
-              {jobState.status === 'cancelled' && (
-                <div className="p-4 rounded-xl bg-[#F0B44C]/10 border border-[#F0B44C]/30 space-y-2 text-xs font-mono text-[#F0B44C]">
-                  <div className="flex items-center space-x-2 font-semibold">
-                    <XCircle className="w-4 h-4 shrink-0" />
-                    <span>Job Cancelled</span>
-                  </div>
-                  <p className="text-xs text-[#F0B44C]/90">The super-resolution process was stopped by user request.</p>
-                  <button
-                    type="button"
-                    onClick={handleSuperResolve}
-                    className="mt-1 px-3 py-1 rounded-lg bg-[#F0B44C]/20 hover:bg-[#F0B44C]/30 border border-[#F0B44C]/40 text-white font-semibold transition-colors"
-                  >
-                    Restart Job
-                  </button>
-                </div>
-              )}
             </div>
+
+            {/* Clean Progress Indicator */}
+            {loading && (
+              <div className="p-4 rounded-xl bg-[#080D16] border border-[#1A2B40] space-y-3 animate-in fade-in duration-200">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-[#80BCFF] font-medium">{currentStep || 'Processing image...'}</span>
+                  <div className="flex items-center space-x-3">
+                    <span className="text-[#F5F8FC] font-bold font-mono">{progress}%</span>
+                    <button
+                      type="button"
+                      onClick={handleCancelJob}
+                      className="text-[#98A9BD] hover:text-[#F06464] transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+
+                <div className="w-full h-2 rounded-full bg-[#101D2E] overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-[#268BFF] transition-all duration-300"
+                    style={{ width: `${Math.max(5, progress)}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Error Banner with Retry */}
+            {error && (
+              <div className="p-4 rounded-xl bg-[#F06464]/10 border border-[#F06464]/30 space-y-2 text-xs text-[#F06464]">
+                <div className="flex items-center space-x-2 font-semibold">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>Enhancement Notice</span>
+                </div>
+                <p className="text-[#F5F8FC]/90">{error}</p>
+                <button
+                  type="button"
+                  onClick={handleSuperResolve}
+                  className="mt-1 px-3 py-1.5 rounded-lg bg-[#F06464]/20 hover:bg-[#F06464]/30 border border-[#F06464]/40 text-white font-medium transition-colors"
+                >
+                  Retry Enhancement
+                </button>
+              </div>
+            )}
           </div>
         </div>
       ) : (
-        /* Result View with Interactive Comparison Slider */
+        /* Results View */
         <div className="space-y-6">
-          {/* Comparison Slider */}
+          {/* Result Controls Header */}
+          <div className="p-4 rounded-2xl bg-[#0C1421] border border-[#1A2B40] flex flex-wrap items-center justify-between gap-3">
+            {/* Resolution & Scale Badge */}
+            <div className="flex items-center space-x-2">
+              <span className="px-3 py-1 rounded-full bg-[#101D2E] border border-[#268BFF]/40 text-xs font-semibold text-[#80BCFF]">
+                {result.scale_factor} Upscaled
+              </span>
+              <span className="text-xs font-mono text-[#98A9BD]">
+                {result.input_resolution} → {result.output_resolution} px
+              </span>
+            </div>
+
+            {/* View Mode Switcher */}
+            <div className="flex items-center space-x-1 p-1 rounded-xl bg-[#080D16] border border-[#1A2B40]">
+              <button
+                type="button"
+                onClick={() => setViewMode('slider')}
+                className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors flex items-center space-x-1.5 ${
+                  viewMode === 'slider'
+                    ? 'bg-[#101D2E] text-[#80BCFF] border border-[#268BFF]/30'
+                    : 'text-[#98A9BD] hover:text-[#F5F8FC]'
+                }`}
+              >
+                <Sliders className="w-3.5 h-3.5" />
+                <span>Comparison Slider</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setViewMode('sideBySide')}
+                className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors flex items-center space-x-1.5 ${
+                  viewMode === 'sideBySide'
+                    ? 'bg-[#101D2E] text-[#80BCFF] border border-[#268BFF]/30'
+                    : 'text-[#98A9BD] hover:text-[#F5F8FC]'
+                }`}
+              >
+                <Columns className="w-3.5 h-3.5" />
+                <span>Side-by-Side</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setViewMode('enhanced')}
+                className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors flex items-center space-x-1.5 ${
+                  viewMode === 'enhanced'
+                    ? 'bg-[#101D2E] text-[#80BCFF] border border-[#268BFF]/30'
+                    : 'text-[#98A9BD] hover:text-[#F5F8FC]'
+                }`}
+              >
+                <ImageIcon className="w-3.5 h-3.5" />
+                <span>Enhanced Full</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Main Visual Display */}
           <div className="p-6 rounded-2xl bg-[#0C1421] border border-[#1A2B40] space-y-4">
-            <div className="flex items-center justify-between text-xs font-mono">
-              <span className="text-[#80BCFF] flex items-center space-x-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-[#268BFF]" />
-                <span>INTERACTIVE BEFORE / AFTER COMPARISON</span>
-              </span>
-              <span className="text-[#98A9BD]">
-                {result.input_resolution} → {result.output_resolution} ({result.scale_factor})
-              </span>
-            </div>
+            {viewMode === 'slider' && (
+              <div className="rounded-xl overflow-hidden border border-[#1A2B40] bg-[#05070B]">
+                <ComparisonSlider
+                  originalSrc={result.original_image_url}
+                  processedSrc={result.active_output_url}
+                  originalLabel={`Original (${result.input_resolution})`}
+                  processedLabel={`Enhanced ${result.scale_factor} (${result.output_resolution})`}
+                  onViewFull={() => setShowFullModal(true)}
+                />
+              </div>
+            )}
 
-            <div className="rounded-xl overflow-hidden border border-[#1A2B40] bg-[#05070B]">
-              <ComparisonSlider
-                originalUrl={result.original_image_url}
-                processedUrl={result.png_url}
-                originalLabel={`Original (${result.input_resolution})`}
-                processedLabel={`Real-ESRGAN ${result.scale_factor} (${result.output_resolution})`}
-              />
-            </div>
+            {viewMode === 'sideBySide' && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-xs font-mono text-[#98A9BD] px-1">
+                    <span>ORIGINAL</span>
+                    <span>{result.input_resolution}</span>
+                  </div>
+                  <div className="rounded-xl overflow-hidden border border-[#1A2B40] bg-[#05070B] p-2 flex items-center justify-center min-h-[320px]">
+                    <img
+                      src={result.original_image_url}
+                      alt="Original photograph"
+                      className="max-h-[500px] w-auto max-w-full object-contain mx-auto rounded-lg"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-xs font-mono text-[#80BCFF] px-1">
+                    <span>ENHANCED ({result.scale_factor})</span>
+                    <span>{result.output_resolution}</span>
+                  </div>
+                  <div className="rounded-xl overflow-hidden border border-[#268BFF]/40 bg-[#05070B] p-2 flex items-center justify-center min-h-[320px]">
+                    <img
+                      src={result.active_output_url}
+                      alt="Enhanced high resolution"
+                      className="max-h-[500px] w-auto max-w-full object-contain mx-auto rounded-lg"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {viewMode === 'enhanced' && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-xs font-mono text-[#80BCFF] px-1">
+                  <span>ENHANCED IMAGE ({result.output_resolution})</span>
+                  <button
+                    type="button"
+                    onClick={() => setShowFullModal(true)}
+                    className="text-xs text-[#80BCFF] hover:underline flex items-center space-x-1"
+                  >
+                    <Maximize2 className="w-3.5 h-3.5" />
+                    <span>View Fullscreen</span>
+                  </button>
+                </div>
+                <div className="rounded-xl overflow-hidden border border-[#1A2B40] bg-[#05070B] p-3 flex items-center justify-center">
+                  <img
+                    src={result.active_output_url}
+                    alt="Enhanced high resolution"
+                    className="max-h-[620px] w-auto max-w-full object-contain mx-auto rounded-lg cursor-zoom-in"
+                    onClick={() => setShowFullModal(true)}
+                    title="Click to view full size"
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* Telemetry Metrics */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <div className="p-4 rounded-xl bg-[#0C1421] border border-[#1A2B40]">
-              <div className="flex items-center space-x-1.5 text-xs font-mono text-[#64758A] mb-1">
-                <Clock className="w-3.5 h-3.5 text-[#268BFF]" />
-                <span>INFERENCE TIME</span>
-              </div>
-              <div className="text-lg font-bold text-[#F5F8FC] font-mono">
-                {result.elapsed_seconds}s
-              </div>
-            </div>
-
-            <div className="p-4 rounded-xl bg-[#0C1421] border border-[#1A2B40]">
-              <div className="flex items-center space-x-1.5 text-xs font-mono text-[#64758A] mb-1">
-                <Maximize2 className="w-3.5 h-3.5 text-[#25C98A]" />
-                <span>SCALING MULTIPLIER</span>
-              </div>
-              <div className="text-lg font-bold text-[#F5F8FC] font-mono">
-                {result.scale_factor} ({result.metrics?.pixel_count_increase} pixels)
-              </div>
-            </div>
-
-            <div className="p-4 rounded-xl bg-[#0C1421] border border-[#1A2B40]">
-              <div className="flex items-center space-x-1.5 text-xs font-mono text-[#64758A] mb-1">
-                <Layers className="w-3.5 h-3.5 text-[#80BCFF]" />
-                <span>RESOLUTION BOOST</span>
-              </div>
-              <div className="text-sm font-bold text-[#F5F8FC] font-mono">
-                {result.input_resolution} → {result.output_resolution}
-              </div>
-            </div>
-
-            <div className="p-4 rounded-xl bg-[#0C1421] border border-[#1A2B40]">
-              <div className="flex items-center space-x-1.5 text-xs font-mono text-[#64758A] mb-1">
-                <Cpu className="w-3.5 h-3.5 text-[#F0B44C]" />
-                <span>COMPUTE ENGINE</span>
-              </div>
-              <div className="text-sm font-bold text-[#F5F8FC] font-mono truncate">
-                {result.device}
-              </div>
-            </div>
-          </div>
-
-          {/* Model Method & Download Bar */}
+          {/* Action & Download Bar */}
           <div className="p-6 rounded-2xl bg-[#0C1421] border border-[#1A2B40] flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div>
-              <div className="text-sm font-bold text-[#F5F8FC]">Download Super-Resolved Output</div>
-              <div className="text-xs text-[#98A9BD] font-mono mt-0.5">
-                {result.metrics?.upscaling_method}
-              </div>
+            <div className="text-center sm:text-left">
+              <h3 className="text-sm font-bold text-[#F5F8FC]">Enhancement Complete</h3>
+              <p className="text-xs text-[#98A9BD] mt-0.5">
+                Saved at {result.output_resolution} in {preferredFormat.toUpperCase()} format.
+              </p>
             </div>
 
             <div className="flex items-center space-x-3 w-full sm:w-auto">
               <a
-                href={result.png_url}
-                download={result.png_filename}
-                className="flex-1 sm:flex-initial px-4 py-2.5 rounded-xl bg-[#1769D2] hover:bg-[#268BFF] text-white text-xs font-mono font-semibold flex items-center justify-center space-x-1.5 transition-colors shadow-lg"
+                href={result.active_download_url}
+                download={result.active_download_name}
+                className="flex-1 sm:flex-initial px-6 py-3 rounded-xl bg-[#268BFF] hover:bg-[#1769D2] text-white text-xs font-bold flex items-center justify-center space-x-2 transition-all shadow-[0_0_15px_rgba(38,139,255,0.3)]"
               >
                 <Download className="w-4 h-4" />
-                <span>Download PNG (Lossless)</span>
+                <span>Download Enhanced Image</span>
               </a>
-              <a
-                href={result.jpg_url}
-                download={result.jpg_filename}
-                className="flex-1 sm:flex-initial px-4 py-2.5 rounded-xl bg-[#101D2E] hover:bg-[#1A2B40] border border-[#1A2B40] text-[#80BCFF] text-xs font-mono font-semibold flex items-center justify-center space-x-1.5 transition-colors"
+
+              <button
+                type="button"
+                onClick={handleReset}
+                className="px-4 py-3 rounded-xl bg-[#101D2E] hover:bg-[#1A2B40] border border-[#1A2B40] text-xs font-medium text-[#98A9BD] hover:text-[#F5F8FC] transition-colors"
+                title="Process another image"
               >
-                <Download className="w-4 h-4" />
-                <span>Download JPG</span>
-              </a>
+                <RotateCcw className="w-4 h-4" />
+              </button>
             </div>
+          </div>
+
+          {/* Collapsible Technical Diagnostics (Cleanly hidden for ordinary users) */}
+          <div className="rounded-xl border border-[#1A2B40] bg-[#080D16] overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setShowDiagnostics(!showDiagnostics)}
+              className="w-full px-4 py-3 text-left text-xs font-mono text-[#64758A] hover:text-[#98A9BD] flex items-center justify-between transition-colors"
+            >
+              <span>Technical Diagnostics & Metadata</span>
+              {showDiagnostics ? (
+                <ChevronUp className="w-3.5 h-3.5" />
+              ) : (
+                <ChevronDown className="w-3.5 h-3.5" />
+              )}
+            </button>
+
+            {showDiagnostics && (
+              <div className="p-4 border-t border-[#1A2B40] grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs font-mono text-[#98A9BD]">
+                <div>
+                  <div className="text-[#64758A] text-[10px]">INFERENCE TIME</div>
+                  <div className="text-[#F5F8FC] font-bold">{result.elapsed_seconds}s</div>
+                </div>
+                <div>
+                  <div className="text-[#64758A] text-[10px]">PIXEL INCREASE</div>
+                  <div className="text-[#F5F8FC] font-bold">{result.metrics?.pixel_count_increase || `${scale * scale}x`}</div>
+                </div>
+                <div>
+                  <div className="text-[#64758A] text-[10px]">COMPUTE ACCELERATOR</div>
+                  <div className="text-[#F5F8FC] font-bold truncate">{result.device}</div>
+                </div>
+                <div>
+                  <div className="text-[#64758A] text-[10px]">FILE SIZE</div>
+                  <div className="text-[#F5F8FC] font-bold">{result.metrics?.output_size_mb} MB</div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Fullscreen Lightbox Modal */}
+      {showFullModal && result && (
+        <div
+          className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md p-4 flex flex-col items-center justify-center animate-in fade-in duration-200"
+          onClick={() => setShowFullModal(false)}
+        >
+          <div className="absolute top-4 right-4 flex items-center space-x-3 z-10">
+            <a
+              href={result.active_download_url}
+              download={result.active_download_name}
+              onClick={(e) => e.stopPropagation()}
+              className="px-3.5 py-1.5 rounded-xl bg-[#268BFF] text-white text-xs font-medium flex items-center space-x-1.5 shadow-md"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Download</span>
+            </a>
+            <button
+              onClick={() => setShowFullModal(false)}
+              className="p-2 rounded-xl bg-[#101D2E] text-[#98A9BD] hover:text-[#F5F8FC] border border-[#1A2B40] transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          <div
+            className="max-w-[95vw] max-h-[90vh] overflow-auto flex items-center justify-center p-2"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <img
+              src={result.active_output_url}
+              alt="Enhanced Full Resolution"
+              className="max-h-[88vh] w-auto max-w-full object-contain rounded-xl shadow-2xl"
+            />
+          </div>
+
+          <div className="absolute bottom-4 text-xs font-mono text-[#98A9BD] bg-[#080D16]/80 px-3 py-1 rounded-full border border-[#1A2B40]">
+            Enhanced Resolution: {result.output_resolution} px ({result.scale_factor})
           </div>
         </div>
       )}

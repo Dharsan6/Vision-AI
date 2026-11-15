@@ -16,13 +16,9 @@ export default function About() {
     <div className="space-y-10 max-w-4xl mx-auto">
       {/* Header */}
       <div className="border-b border-[#1A2B40] pb-6">
-        <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-[#101D2E] border border-[#1A2B40] text-xs font-mono text-[#80BCFF] mb-2">
-          <Info className="w-3.5 h-3.5 text-[#268BFF]" />
-          <span>PROJECT ARCHITECTURE & CITATIONS</span>
-        </div>
-        <h1 className="text-3xl font-extrabold text-[#F5F8FC] tracking-tight">About VISION AI</h1>
+        <h1 className="text-2xl sm:text-3xl font-extrabold text-[#F5F8FC] tracking-tight">About VISION AI</h1>
         <p className="text-sm text-[#98A9BD] mt-1">
-          Deep Learning for Computer Vision (DLCV) platform designed for authentic image colorization, video chrominance restoration, and sub-pixel super-resolution.
+          Deep Learning platform designed for authentic image colorization, video restoration, and sub-pixel super-resolution.
         </p>
       </div>
 

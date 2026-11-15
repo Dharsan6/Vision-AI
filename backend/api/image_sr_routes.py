@@ -17,12 +17,14 @@ router = APIRouter(prefix="/image", tags=["Image Super-Resolution"])
 async def enhance_image_endpoint(
     image: UploadFile = File(...),
     scale: int = Form(4),
+    strength: str = Form("strong"),
     preferred_format: str = Form("png"),
     max_dimension: int = Form(0),
     sync: bool = Form(False),
 ):
     """
     Super-resolve a single image using the Real-ESRGAN x4plus deep learning model (2x or 4x).
+    Supports 'strong' (100% deep neural reconstruction) and 'balanced' (natural texture blending).
     By default runs asynchronously via JobManager, returning immediately with a job_id for live progress polling.
     Supports synchronous execution when sync=True.
     """
@@ -35,6 +37,9 @@ async def enhance_image_endpoint(
 
     if scale not in (2, 4):
         raise HTTPException(status_code=400, detail="Scale factor must be 2 or 4.")
+
+    if strength not in ("balanced", "strong"):
+        strength = "strong"
 
     upload_id = str(uuid.uuid4())[:12]
     safe_name = image.filename.replace(" ", "_") if image.filename else f"image{file_ext}"
@@ -58,14 +63,16 @@ async def enhance_image_endpoint(
             result = image_super_resolution_service.upscale_image(
                 input_image_path=input_path,
                 scale=scale,
+                strength=strength,
                 preferred_format=preferred_format,
+                original_filename=image.filename or safe_name,
                 max_dimension=max_dimension if max_dimension > 0 else None,
             )
 
             # Record in history database
             history_service.add_record(
                 record_id=result["job_id"],
-                file_name=image.filename,
+                file_name=image.filename or safe_name,
                 module=f"Image Super-Resolution ({scale}x)",
                 model_name=result["model_name"],
                 input_resolution=result["input_resolution"],
@@ -73,8 +80,8 @@ async def enhance_image_endpoint(
                 device=result["device"],
                 duration_sec=result["elapsed_seconds"],
                 status="completed",
-                output_url=result["png_url"] if preferred_format == "png" else result["jpg_url"],
-                download_url=f"/api/media/download/{result['png_filename'] if preferred_format == 'png' else result['jpg_filename']}",
+                output_url=result["output_url"],
+                download_url=result["download_url"],
                 metrics=result["metrics"],
             )
 
@@ -94,6 +101,7 @@ async def enhance_image_endpoint(
     job["input_resolution"] = f"{orig_w}x{orig_h}"
     job["file_size_mb"] = file_size_mb
     job["scale"] = f"{scale}x"
+    job["strength"] = strength
     job["device"] = device_manager.get_device_name()
 
     # Launch processing in background thread
@@ -102,6 +110,7 @@ async def enhance_image_endpoint(
         job_id=job_id,
         input_image_path=input_path,
         scale=scale,
+        strength=strength,
         preferred_format=preferred_format,
         original_filename=image.filename or safe_name,
         max_dimension=max_dimension if max_dimension > 0 else None,
@@ -112,7 +121,8 @@ async def enhance_image_endpoint(
         "job_id": job_id,
         "status": "queued",
         "scale": f"{scale}x",
-        "message": f"Image super-resolution ({scale}x) job queued for background execution.",
+        "strength": strength,
+        "message": f"Image super-resolution ({scale}x, {strength}) job queued for background execution.",
         "original_image_url": f"/api/media/upload/{input_path.name}",
         "input_resolution": f"{orig_w}x{orig_h}",
         "file_size_mb": file_size_mb,

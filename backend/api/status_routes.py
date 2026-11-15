@@ -5,7 +5,7 @@ from backend.models.model_manager import model_manager
 router = APIRouter(tags=["Status & System"])
 
 
-@router.get("/health")
+@router.api_route("/health", methods=["GET", "HEAD"])
 def get_health():
     """
     Service health check endpoint.

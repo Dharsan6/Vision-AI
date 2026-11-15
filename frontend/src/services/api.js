@@ -73,6 +73,7 @@ export const api = {
   enhanceImage: async (
     file,
     scale = 4,
+    strength = 'strong',
     preferredFormat = 'png',
     maxDimension = 0,
     onProgress = null
@@ -80,6 +81,7 @@ export const api = {
     const formData = new FormData();
     formData.append('image', file);
     formData.append('scale', scale.toString());
+    formData.append('strength', strength);
     formData.append('preferred_format', preferredFormat);
     if (maxDimension > 0) {
       formData.append('max_dimension', maxDimension.toString());
@@ -101,12 +103,14 @@ export const api = {
   startImageEnhanceJob: async (
     file,
     scale = 4,
+    strength = 'strong',
     preferredFormat = 'png',
     maxDimension = 0
   ) => {
     const formData = new FormData();
     formData.append('image', file);
     formData.append('scale', scale.toString());
+    formData.append('strength', strength);
     formData.append('preferred_format', preferredFormat);
     if (maxDimension > 0) {
       formData.append('max_dimension', maxDimension.toString());
