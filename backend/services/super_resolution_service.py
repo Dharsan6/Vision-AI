@@ -90,10 +90,6 @@ class SuperResolutionService:
                 frame_out_path = output_frames_dir / f"frame_{idx:06d}.png"
                 cv2.imwrite(str(frame_out_path), enhanced_bgr)
 
-                # Memory cleanup periodically
-                if idx % 5 == 0:
-                    device_manager.cleanup_memory()
-
                 # Update progress: 12% to 88% range for super-resolution
                 pct = 12.0 + (idx + 1) / total_frames * 76.0
                 job_manager.update_job(

@@ -17,6 +17,7 @@ class VideoFrameExtractor:
         """
         Extract video resolution, duration, FPS, total frame count, and audio presence.
         """
+        video_path = Path(video_path)
         cap = cv2.VideoCapture(str(video_path))
         if not cap.isOpened():
             raise ValueError(f"Unable to open video file: {video_path}")
@@ -93,6 +94,8 @@ class VideoFrameExtractor:
         Extract video frames as images into output_dir.
         Optionally resizes frames to target_resolution (e.g. '480p', '720p', 'original').
         """
+        video_path = Path(video_path)
+        output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
         meta = VideoFrameExtractor.get_video_metadata(video_path)
         cap = cv2.VideoCapture(str(video_path))

@@ -166,6 +166,7 @@ class SmartRestoreService:
             "stages_executed": stages_executed,
             "colorized_url": colorized_url,
             "final_output_url": final_url,
+            "output_url": final_url,
             "png_filename": final_png_filename,
             "jpg_filename": final_jpg_filename,
             "summary_url": f"/api/media/output/{summary_filename}",

@@ -61,14 +61,19 @@ class ImageService:
         jpg_path = OUTPUTS_DIR / jpg_filename
 
         # Save both PNG (lossless) and JPG (compact)
-        cv2.imwrite(str(png_path), colorized_bgr)
-        cv2.imwrite(str(jpg_path), colorized_bgr, [cv2.IMWRITE_JPEG_QUALITY, 95])
+        ok1 = cv2.imwrite(str(png_path), colorized_bgr)
+        ok2 = cv2.imwrite(str(jpg_path), colorized_bgr, [cv2.IMWRITE_JPEG_QUALITY, 95])
+
+        if not ok1 or not png_path.exists() or png_path.stat().st_size == 0:
+            raise IOError(f"Colorized PNG output could not be saved at {png_path}")
+        if not ok2 or not jpg_path.exists() or jpg_path.stat().st_size == 0:
+            raise IOError(f"Colorized JPG output could not be saved at {jpg_path}")
 
         # Compute metrics
         metrics = compute_image_metrics(colorized_bgr, ref_bgr)
 
-        # Clean memory
-        device_manager.cleanup_memory()
+        active_filename = png_filename if preferred_format == "png" else jpg_filename
+        active_url = f"/api/media/output/{active_filename}"
 
         return {
             "success": True,
@@ -83,6 +88,8 @@ class ImageService:
             "jpg_filename": jpg_filename,
             "png_url": f"/api/media/output/{png_filename}",
             "jpg_url": f"/api/media/output/{jpg_filename}",
+            "output_url": active_url,
+            "download_url": f"/api/media/download/{active_filename}",
             "metrics": metrics,
         }
 

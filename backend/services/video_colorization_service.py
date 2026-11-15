@@ -84,10 +84,6 @@ class VideoColorizationService:
                 frame_out_path = output_frames_dir / f"frame_{idx:06d}.png"
                 cv2.imwrite(str(frame_out_path), color_bgr)
 
-                # Memory release every 10 frames
-                if idx % 10 == 0:
-                    device_manager.cleanup_memory()
-
                 # Update progress: 15% to 85% range for frame inference
                 pct = 15.0 + (idx + 1) / total_frames * 70.0
                 job_manager.update_job(

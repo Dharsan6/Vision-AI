@@ -1,4 +1,7 @@
 import os
+import io
+import time
+import threading
 import requests
 from pathlib import Path
 from typing import Dict, Any, Optional
@@ -21,15 +24,18 @@ from backend.models.realesrgan import RealESRGANPredictor
 class ModelManager:
     """
     Centralized Model Manager for VISION AI.
-    Handles automated weight downloads, integrity verification, lazy loading,
-    in-memory caching, memory cleanup, and runtime status inspection.
+    Handles automated weight downloads, integrity verification, thread-safe lazy loading,
+    warm-up preloading, in-memory caching, memory cleanup, and runtime status inspection.
     """
     _instance = None
+    _init_lock = threading.Lock()
 
     def __new__(cls):
         if cls._instance is None:
-            cls._instance = super(ModelManager, cls).__new__(cls)
-            cls._instance._init_manager()
+            with cls._init_lock:
+                if cls._instance is None:
+                    cls._instance = super(ModelManager, cls).__new__(cls)
+                    cls._instance._init_manager()
         return cls._instance
 
     def _init_manager(self):
@@ -38,6 +44,8 @@ class ModelManager:
         self._realesrgan_instance: Optional[RealESRGANPredictor] = None
         self._ddcolor_error: Optional[str] = None
         self._realesrgan_error: Optional[str] = None
+        self._lock = threading.Lock()
+        self._is_preloading = False
 
     def _download_file(self, primary_url: str, fallback_url: str, dest_path: Path):
         """
@@ -61,7 +69,10 @@ class ModelManager:
             except Exception as e:
                 print(f"[ModelManager] Download failed from {url}: {e}")
                 if temp_dest.exists():
-                    temp_dest.unlink()
+                    try:
+                        temp_dest.unlink()
+                    except OSError:
+                        pass
 
         raise RuntimeError(f"Unable to download model weights from either {primary_url} or {fallback_url}")
 
@@ -79,45 +90,97 @@ class ModelManager:
 
     def get_ddcolor(self, input_size: int = 512) -> DDColorPredictor:
         """
-        Lazy-loads DDColor model onto MPS or CPU device.
+        Thread-safe getter for DDColor model instance.
+        Loads model onto MPS or CPU on first invocation and caches in memory.
         """
-        if self._ddcolor_instance is None:
+        if self._ddcolor_instance is not None:
+            return self._ddcolor_instance
+
+        with self._lock:
+            # Double-checked locking
+            if self._ddcolor_instance is not None:
+                return self._ddcolor_instance
+
             try:
                 weight_path = self.ensure_ddcolor_weights()
                 device = device_manager.get_device()
-                print(f"[ModelManager] Loading DDColor onto device: {device}")
+                print(f"[ModelManager] Initializing DDColor ({weight_path.name}) on device: {device}...")
+                t0 = time.perf_counter()
                 self._ddcolor_instance = DDColorPredictor(str(weight_path), input_size=input_size, device=device)
                 self._ddcolor_error = None
+                print(f"[ModelManager] DDColor successfully loaded in {time.perf_counter() - t0:.2f}s")
             except Exception as e:
-                self._ddcolor_error = str(e)
+                self._ddcolor_error = f"{type(e).__name__}: {str(e)}"
+                print(f"[ModelManager] ERROR: Failed to load DDColor: {self._ddcolor_error}")
                 raise RuntimeError(f"Failed to load DDColor: {e}")
+
         return self._ddcolor_instance
 
     def get_realesrgan(self, scale: int = 4, tile_size: int = 512) -> RealESRGANPredictor:
         """
-        Lazy-loads Real-ESRGAN model onto MPS or CPU device.
+        Thread-safe getter for Real-ESRGAN model instance.
+        Loads model onto MPS or CPU on first invocation and caches in memory.
         """
-        if self._realesrgan_instance is None:
+        if self._realesrgan_instance is not None:
+            return self._realesrgan_instance
+
+        with self._lock:
+            # Double-checked locking
+            if self._realesrgan_instance is not None:
+                return self._realesrgan_instance
+
             try:
                 weight_path = self.ensure_realesrgan_weights()
                 device = device_manager.get_device()
-                print(f"[ModelManager] Loading Real-ESRGAN onto device: {device}")
+                print(f"[ModelManager] Initializing Real-ESRGAN ({weight_path.name}) on device: {device}...")
+                t0 = time.perf_counter()
                 self._realesrgan_instance = RealESRGANPredictor(
                     str(weight_path), scale=scale, tile_size=tile_size, device=device
                 )
                 self._realesrgan_error = None
+                print(f"[ModelManager] Real-ESRGAN successfully loaded in {time.perf_counter() - t0:.2f}s")
             except Exception as e:
-                self._realesrgan_error = str(e)
+                self._realesrgan_error = f"{type(e).__name__}: {str(e)}"
+                print(f"[ModelManager] ERROR: Failed to load Real-ESRGAN: {self._realesrgan_error}")
                 raise RuntimeError(f"Failed to load Real-ESRGAN: {e}")
+
         return self._realesrgan_instance
+
+    def preload_models(self):
+        """
+        Warm up and preload both models into unified memory at application startup.
+        Prevents first-request cold start latency for users.
+        """
+        print("[ModelManager] Preloading neural models for zero-latency inference...")
+        try:
+            self.get_ddcolor(input_size=512)
+        except Exception as e:
+            print(f"[ModelManager] Warning: Preloading DDColor deferred: {e}")
+
+        try:
+            self.get_realesrgan(scale=4, tile_size=512)
+        except Exception as e:
+            print(f"[ModelManager] Warning: Preloading Real-ESRGAN deferred: {e}")
+
+        print("[ModelManager] Neural models preloaded and active.")
+
+    def preload_models_background(self):
+        """
+        Launches model preloading on a daemon thread so server startup is instantaneous.
+        """
+        if not self._is_preloading:
+            self._is_preloading = True
+            thread = threading.Thread(target=self.preload_models, daemon=True, name="ModelPreloader")
+            thread.start()
 
     def unload_models(self):
         """
         Unload models to free GPU/MPS and system memory.
         """
-        self._ddcolor_instance = None
-        self._realesrgan_instance = None
-        device_manager.cleanup_memory()
+        with self._lock:
+            self._ddcolor_instance = None
+            self._realesrgan_instance = None
+            device_manager.cleanup_memory()
 
     def get_models_status(self) -> Dict[str, Any]:
         """
@@ -139,7 +202,7 @@ class ModelManager:
             },
             "realesrgan": {
                 "name": "Real-ESRGAN x4plus (RRDBNet 23-Block)",
-                "task": "Video Super-Resolution & Upscaling",
+                "task": "Image & Video Super-Resolution",
                 "weights_filename": REALESRGAN_MODEL_FILENAME,
                 "weights_exist": realesrgan_file.exists(),
                 "file_size_mb": round(realesrgan_file.stat().st_size / (1024 * 1024), 2) if realesrgan_file.exists() else 0,
@@ -151,4 +214,3 @@ class ModelManager:
 
 
 model_manager = ModelManager()
-

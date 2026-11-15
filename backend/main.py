@@ -60,6 +60,9 @@ async def startup_event():
         ensure_sample_media()
     except Exception as e:
         print(f"[VISION AI] Warning: Sample media generation deferred: {e}")
+    
+    # Warm up neural models in background for zero-latency inference
+    model_manager.preload_models_background()
     print("[VISION AI] Ready to process media inference requests.")
 
 

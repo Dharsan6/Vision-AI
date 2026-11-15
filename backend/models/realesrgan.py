@@ -1,4 +1,6 @@
+import io
 import math
+import time
 import threading
 from typing import Optional, Callable
 import torch
@@ -90,8 +92,23 @@ class RealESRGANPredictor:
         self.device = device or torch.device("mps" if torch.backends.mps.is_available() else "cpu")
 
         self.model = RRDBNet(num_in_ch=3, num_out_ch=3, num_feat=64, num_block=23, num_grow_ch=32, scale=4)
-        ckpt = torch.load(model_path, map_location="cpu")
-        state_dict = ckpt["params_ema"] if "params_ema" in ckpt else (ckpt["params"] if "params" in ckpt else ckpt)
+        state_dict = None
+        last_error = None
+        for attempt in range(3):
+            try:
+                with open(model_path, "rb") as f:
+                    buf = io.BytesIO(f.read())
+                ckpt = torch.load(buf, map_location="cpu")
+                state_dict = ckpt["params_ema"] if "params_ema" in ckpt else (ckpt["params"] if "params" in ckpt else ckpt)
+                del buf, ckpt
+                break
+            except (IOError, OSError) as io_err:
+                last_error = io_err
+                time.sleep(0.15 * (attempt + 1))
+
+        if state_dict is None:
+            raise RuntimeError(f"Unable to read Real-ESRGAN checkpoint at {model_path}: {last_error}")
+
         self.model.load_state_dict(state_dict, strict=True)
         self.model.to(self.device)
         self.model.eval()
@@ -167,10 +184,8 @@ class RealESRGANPredictor:
 
                 output_bgr[output_start_y:output_end_y, output_start_x:output_end_x] = tile_bgr
 
-                # Release local tensors and periodically clear MPS cache
+                # Release local tensors immediately to keep MPS memory flat
                 del input_tile, output_tile, cropped_tile
-                if current_tile % 4 == 0 and self.device.type == "mps":
-                    torch.mps.empty_cache()
 
                 if on_tile_done:
                     on_tile_done(current_tile, total_tiles)

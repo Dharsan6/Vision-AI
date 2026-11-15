@@ -37,7 +37,7 @@ class VideoReconstructor:
             "-c:v", "libx264",
             "-pix_fmt", "yuv420p",
             "-crf", str(crf),
-            "-preset", "medium",
+            "-preset", "fast",
             "-movflags", "+faststart",
             str(temp_video_no_audio),
         ]
