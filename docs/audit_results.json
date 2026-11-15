@@ -1,0 +1,93 @@
+[
+  {
+    "test_name": "Device Detection & Hardware Acceleration",
+    "input": "System Hardware",
+    "result": "Device: Apple Silicon (MPS Acceleration), MPS Available: True",
+    "pass": true,
+    "details": "Memory: 5.27/16.0 GB"
+  },
+  {
+    "test_name": "Model Weights Existence & Integrity",
+    "input": "storage/models/*.pth",
+    "result": "DDColor: 210.18 MB, Real-ESRGAN: 63.94 MB",
+    "pass": true,
+    "details": "Both deep neural network weights verified on disk."
+  },
+  {
+    "test_name": "DDColor Image Colorization (JPEG Grayscale)",
+    "input": "sample_portrait_gray.jpg",
+    "result": "512x512 -> 512x512 in 1.514s on Apple Silicon (MPS Acceleration)",
+    "pass": true,
+    "details": "Output file: colorized_cc4c4a79-5c8_sample_portrait_gray.png (558.9 KB)"
+  },
+  {
+    "test_name": "DDColor Image Colorization (PNG Grayscale)",
+    "input": "sample_portrait_colorized.png",
+    "result": "512x512 -> 512x512 in 0.345s on Apple Silicon (MPS Acceleration)",
+    "pass": true,
+    "details": "Output file: colorized_5cf4604f-845_sample_portrait_colorized.png (556.8 KB)"
+  },
+  {
+    "test_name": "DDColor Image Colorization (WebP Grayscale)",
+    "input": "test.webp",
+    "result": "512x512 -> 512x512 in 0.33s on Apple Silicon (MPS Acceleration)",
+    "pass": true,
+    "details": "Output file: colorized_2aa22aed-1df_test.png (526.9 KB)"
+  },
+  {
+    "test_name": "Real-ESRGAN Image Super-Resolution (2x)",
+    "input": "sample_portrait_gray.jpg (2x)",
+    "result": "512x512 -> 1024x1024 in 4.894s on Apple Silicon (MPS Acceleration)",
+    "pass": true,
+    "details": "Architecture: RRDBNet (Residual in Residual Dense Block), Output: sr_2x_541a70ca-32d_sample_portrait_gray.png"
+  },
+  {
+    "test_name": "Real-ESRGAN Image Super-Resolution (4x)",
+    "input": "sample_portrait_gray.jpg (4x)",
+    "result": "512x512 -> 2048x2048 in 4.728s on Apple Silicon (MPS Acceleration)",
+    "pass": true,
+    "details": "Architecture: RRDBNet (Residual in Residual Dense Block), Output: sr_4x_c825b04e-b45_sample_portrait_gray.png"
+  },
+  {
+    "test_name": "Video Codec & Stream Decode (MP4 Container)",
+    "input": "sample_motion_gray.mp4",
+    "result": "Res: 320x240, FPS: 24.0, Frames: 24, Audio: False",
+    "pass": true,
+    "details": "OpenCV isOpened: True, File Size: 0.04 MB"
+  },
+  {
+    "test_name": "Video Codec & Stream Decode (MOV Container)",
+    "input": "test.mov",
+    "result": "Res: 320x240, FPS: 24.0, Frames: 24, Audio: True",
+    "pass": true,
+    "details": "OpenCV isOpened: True, File Size: 0.01 MB"
+  },
+  {
+    "test_name": "Video Codec & Stream Decode (AVI Container)",
+    "input": "test.avi",
+    "result": "Res: 320x240, FPS: 24.0, Frames: 25, Audio: True",
+    "pass": true,
+    "details": "OpenCV isOpened: True, File Size: 0.07 MB"
+  },
+  {
+    "test_name": "Video Codec & Stream Decode (MKV Container)",
+    "input": "test.mkv",
+    "result": "Res: 320x240, FPS: 24.0, Frames: 25, Audio: True",
+    "pass": true,
+    "details": "OpenCV isOpened: True, File Size: 0.01 MB"
+  },
+  {
+    "test_name": "Video Codec & Stream Decode (3GP Container)",
+    "input": "MOV00003s.3gp",
+    "result": "Res: 176x144, FPS: 9.96479762581297, Frames: 2525, Audio: True",
+    "pass": true,
+    "details": "OpenCV isOpened: True, File Size: 5.17 MB"
+  },
+  {
+    "test_name": "Video Super-Resolution on 3GP with AMR-NB -> AAC Remux",
+    "input": "MOV00003s.3gp",
+    "result": "6 frames (176x144 -> 352x288) in 2.891s. Video Stream: True, Audio Stream: True",
+    "pass": true,
+    "details": "Reconstructed file: audit_3gp_enhanced_2x.mp4 (43.9 KB)"
+  }
+]

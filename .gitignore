@@ -1,0 +1,93 @@
+# ==================================================
+# VISION AI — Dedicated Repository .gitignore
+# ==================================================
+
+# 1. Virtual Environments
+.venv/
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# 2. Dependencies & Package Managers
+node_modules/
+frontend/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# 3. Environment & Secrets
+.env
+.env.*
+*.key
+*.pem
+*.secret
+*.cert
+
+# 4. Deep Learning Model Weights & Large Checkpoints
+storage/models/*
+!storage/models/.gitkeep
+*.pth
+*.pt
+*.ckpt
+*.onnx
+*.bin
+*.h5
+*.tflite
+*.safetensors
+
+# 5. Media Uploads & Generated Outputs
+storage/uploads/*
+!storage/uploads/.gitkeep
+storage/outputs/*
+!storage/outputs/.gitkeep
+
+# 6. Temporary Files & Local Scratch Space
+storage/temp/*
+!storage/temp/.gitkeep
+scratch/
+*.tmp
+*.temp
+
+# 7. SQLite Database & Local Runtime Data
+storage/history/*
+!storage/history/.gitkeep
+*.db
+*.sqlite
+*.sqlite3
+*.csv
+
+# 8. Python & Frontend Caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+frontend/.vite/
+.cache/
+
+# 9. Build Artifacts
+dist/
+frontend/dist/
+build/
+develop-eggs/
+eggs/
+.eggs/
+parts/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# 10. Operating System & IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
