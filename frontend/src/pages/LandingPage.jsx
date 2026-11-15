@@ -21,9 +21,13 @@ import ComparisonSlider from '../components/comparison/ComparisonSlider';
 export default function LandingPage() {
   const navigate = useNavigate();
 
-  // Authentic archival photograph pair for showcase
-  const archivalOriginal = '/storage/samples/showcase_lincoln_original.jpg';
-  const archivalRestored = '/storage/samples/showcase_lincoln_restored.jpg';
+  // Authentic archival photograph pairs for showcase (100% genuine DDColor inference output)
+  const showcaseStreetGray = '/storage/samples/showcase_street_original_gray.jpg';
+  const showcaseStreetColor = '/storage/samples/showcase_street_ai_colorized.jpg';
+  const showcasePortraitGray = '/storage/samples/showcase_portrait_original_gray.jpg';
+  const showcasePortraitColor = '/storage/samples/showcase_portrait_ai_colorized.jpg';
+
+  const [activeShowcase, setActiveShowcase] = React.useState('street'); // 'street' or 'portrait'
 
   // 4 Core Studios metadata
   const studios = [
@@ -115,43 +119,69 @@ export default function LandingPage() {
         <div className="relative z-10 mt-14 max-w-4xl mx-auto rounded-2xl p-2 bg-[#0C1421]/80 border border-[#1A2B40] shadow-2xl">
           <div className="rounded-xl overflow-hidden border border-[#1A2B40] bg-[#05070B]">
             <ComparisonSlider
-              originalSrc={archivalOriginal}
-              processedSrc={archivalRestored}
-              originalLabel="Original Archival Scan (1863)"
-              processedLabel="AI Restored & Colorized"
+              originalSrc={showcaseStreetGray}
+              processedSrc={showcaseStreetColor}
+              originalLabel="Original"
+              processedLabel="AI Colorized"
               className="max-h-[520px]"
             />
           </div>
           <div className="flex items-center justify-between px-3 py-2 text-xs font-mono text-[#64758A]">
-            <span>Drag slider horizontally to preview restoration</span>
-            <span className="hidden sm:inline">Abraham Lincoln portrait by Alexander Gardner</span>
+            <span>Drag slider horizontally to preview colorization</span>
+            <span className="hidden sm:inline">Historical Street Scene (1941, Library of Congress)</span>
           </div>
         </div>
       </section>
 
-      {/* SECTION 2 — REALISTIC ARCHIVAL RESTORATION SHOWCASE */}
+      {/* SECTION 2 — AI COLORIZATION SHOWCASE */}
       <section id="showcase" className="py-20 px-6 max-w-6xl mx-auto border-t border-[#1A2B40]">
         <div className="flex flex-col md:flex-row md:items-end justify-between mb-8 gap-4">
           <div className="space-y-2">
             <span className="text-xs font-mono tracking-widest text-[#80BCFF] uppercase">
-              ARCHIVAL RESTORATION SHOWCASE
+              ORIGINAL ARCHIVAL BASE VS RESTORED
             </span>
             <h2 className="text-2xl sm:text-3xl md:text-4xl font-extrabold tracking-tight text-[#F5F8FC]">
-              Historical Precision & Authentic Detail
+              Original Archival Base vs Restored
             </h2>
+            <p className="text-sm text-[#98A9BD]">
+              See how AI brings black-and-white photographs back to life.
+            </p>
           </div>
-          <p className="text-xs text-[#98A9BD] max-w-sm leading-relaxed">
-            Comparing an original 1863 collodion plate scan from the Library of Congress directly against genuine AI chrominance and detail synthesis.
-          </p>
+
+          {/* Interactive Subject Switcher */}
+          <div className="flex items-center space-x-1.5 p-1 rounded-xl bg-[#0C1421] border border-[#1A2B40] self-start md:self-auto">
+            <button
+              type="button"
+              onClick={() => setActiveShowcase('street')}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                activeShowcase === 'street'
+                  ? 'bg-[#101D2E] text-[#80BCFF] border border-[#268BFF]/40 shadow-sm'
+                  : 'text-[#98A9BD] hover:text-[#F5F8FC]'
+              }`}
+            >
+              Street Scene (1941)
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveShowcase('portrait')}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                activeShowcase === 'portrait'
+                  ? 'bg-[#101D2E] text-[#80BCFF] border border-[#268BFF]/40 shadow-sm'
+                  : 'text-[#98A9BD] hover:text-[#F5F8FC]'
+              }`}
+            >
+              Historical Portrait (1911)
+            </button>
+          </div>
         </div>
 
         <div className="p-3 sm:p-4 rounded-2xl bg-[#0C1421] border border-[#1A2B40] shadow-xl space-y-3">
           <div className="rounded-xl overflow-hidden border border-[#1A2B40] bg-[#05070B]">
             <ComparisonSlider
-              originalSrc={archivalOriginal}
-              processedSrc={archivalRestored}
-              originalLabel="Original Archival Monochrome"
-              processedLabel="VISION AI Restored"
+              originalSrc={activeShowcase === 'street' ? showcaseStreetGray : showcasePortraitGray}
+              processedSrc={activeShowcase === 'street' ? showcaseStreetColor : showcasePortraitColor}
+              originalLabel="Original"
+              processedLabel="AI Colorized"
               className="max-h-[580px]"
             />
           </div>
@@ -159,9 +189,13 @@ export default function LandingPage() {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-[#64758A] px-2 pt-1">
             <div className="flex items-center space-x-2">
               <CheckCircle2 className="w-3.5 h-3.5 text-[#25C98A]" />
-              <span className="text-[#98A9BD]">Real-time interactive slider with touch and mouse control</span>
+              <span className="text-[#98A9BD]">
+                {activeShowcase === 'street'
+                  ? 'Calle de Rafael Cordero, San Juan (1941) — Jack Delano, Library of Congress (Public Domain)'
+                  : 'Alim Khan, Emir of Bukhara (1911) — Sergey Prokudin-Gorsky, Library of Congress (Public Domain)'}
+              </span>
             </div>
-            <span>Source: Library of Congress Prints & Photographs Division (Public Domain)</span>
+            <span>Genuine neural colorization generated by DDColor</span>
           </div>
         </div>
       </section>
