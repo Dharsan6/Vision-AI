@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import Navbar from '../components/navigation/Navbar';
 import ComparisonSlider from '../components/comparison/ComparisonSlider';
+import BlurText from '../components/effects/BlurText';
 
 export default function LandingPage() {
   const navigate = useNavigate();
@@ -88,7 +89,8 @@ export default function LandingPage() {
 
           {/* Headline */}
           <h1 className="text-4xl sm:text-5xl md:text-6xl font-extrabold tracking-tight text-[#F5F8FC] leading-[1.12]">
-            Bring Your Images and Videos <span className="text-[#268BFF]">Back to Life.</span>
+            <BlurText text="Bring Your Images and Videos" className="block" />
+            <BlurText text="Back to Life." className="block text-[#268BFF]" delay={90} />
           </h1>
 
           {/* Description */}
