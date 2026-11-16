@@ -1,0 +1,5 @@
+.blur-text { display: inline; }
+.blur-text__word { display: inline-block; opacity: 0; filter: blur(var(--blur-text-blur, 8px)); transform: translateY(var(--blur-text-axis, -18px)); }
+.blur-text.is-visible .blur-text__word { animation: blur-text-enter var(--blur-text-duration, .55s) cubic-bezier(.22,1,.36,1) both; }
+@keyframes blur-text-enter { to { opacity: 1; filter: blur(0); transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { .blur-text__word { opacity: 1; filter: none; transform: none; } .blur-text.is-visible .blur-text__word { animation: none; } }
